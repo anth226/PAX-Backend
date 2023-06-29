@@ -15,7 +15,21 @@ export class AuthController {
     @InjectRepository(UserEntity) private readonly userModel: Repository<UserEntity>,
   ) {}
 
-
+  @Post('/register')
+  async register(
+    @Req() req: Request,
+    @Body() dto: CreateUserDto,
+  ) {
+    try {
+      const userData = await this.authService.register(dto)
+      if(!userData) {
+        throw new HttpException("User not found with that email.", HttpStatus.BAD_REQUEST)
+      }
+      return true
+    } catch (error) {
+      return ErrorHandle(error) 
+    }
+  }
   @Post('/check/email')
   async checkEmail(
     @Req() req: Request,

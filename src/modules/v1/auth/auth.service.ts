@@ -29,6 +29,21 @@ export class AuthService {
     private connection: Connection, // TypeORM transactions.
   ) {}
 
+    async register(userData:any) {
+        const user = await this.userModel.findOneBy({email: userData.email});
+        if (user) {
+            throw new BadRequestException('email already exists.');
+        }
+        var salt = await bcrypt.genSalt(10);
+        const hashPassword = await bcrypt.hash(userData.password, salt);
+        await this.userModel.insert({
+            email:userData.email,
+            password: hashPassword,
+            isActivated: true
+        })
+        return true;
+    }
+
     async checkEmail(userData:any) {
         try {
             return await this.getUserByEmail(userData.email)
@@ -218,7 +233,6 @@ export class AuthService {
     }
 
     async newResetPassword(email: any, password: any) {
-        console.log('yes')
         const user = await this.userModel.findOneBy({email});
         if (!user) {
             throw new BadRequestException('Invalid email');
