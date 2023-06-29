@@ -41,7 +41,7 @@ export class AuthService {
             password: hashPassword,
             isActivated: true
         })
-        return true;
+        return userData;
     }
 
     async checkEmail(userData:any) {
@@ -218,7 +218,7 @@ export class AuthService {
         const linkReset = uuidv4();
         const forgotLink = `${process.env.CLIENT_URL}/resetpwd?link=${linkReset}`;
         await this.mailService.sendMailPasswordCreation(email, forgotLink);
-        return true;
+        return;
     }
 
     async changeResetPassword(email: any, resetLink: any) {
@@ -229,7 +229,7 @@ export class AuthService {
         if (resetLink && user.resetLink !== resetLink) {
             throw new BadRequestException('Invalid Reset Link');
         }
-        return true;
+        return;
     }
 
     async newResetPassword(email: any, password: any) {
@@ -241,7 +241,7 @@ export class AuthService {
         const hashPassword = await bcrypt.hash(password, salt);
         user.password = hashPassword;
         await user.save();
-        return true;
+        return;
     }
 
     async refreshToken(

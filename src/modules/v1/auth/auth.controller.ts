@@ -1,12 +1,19 @@
-import { Body, Controller, HttpException, HttpStatus, Ip, Post, Req, Res, Get, Redirect, Param, Put } from "@nestjs/common";
+import { Body, Controller, HttpException, HttpStatus, Ip, Post, Req, Res, Get, Redirect, Param, Put, HttpCode } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { UserEntity } from "../users/entity/user.entity";
 import { Repository } from "typeorm";
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateUserDto } from "../users/dto/create-user.dto";
-import { ApiTags } from '@nestjs/swagger';
+import { ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ErrorHandle } from "src/exceptions/ErrorHandle";
 import { Request } from "express";
+import { AuthEmailDto } from "./entity/dto/auth-email.dto";
+import { LoginResponseDto } from "./entity/dto/login-response.dto";
+import { VerifyMailDto } from "./entity/dto/verify-mail.dto";
+import { RefreshTokenDto } from "./entity/dto/refresh-token.dto";
+import { CheckResetLinkDto } from "./entity/dto/check-reset-link.dto";
+import { ChangePasswordDto } from "./entity/dto/change-password.dto";
+import { UserDto } from "../users/dto/user.dto";
 
 @Controller('api/v1/auth')
 export class AuthController {
@@ -16,6 +23,7 @@ export class AuthController {
   ) {}
 
   @Post('/register')
+  @ApiResponse({ status: HttpStatus.OK, isArray: false, type: CreateUserDto })
   async register(
     @Req() req: Request,
     @Body() dto: CreateUserDto,
@@ -25,33 +33,36 @@ export class AuthController {
       if(!userData) {
         throw new HttpException("User not found with that email.", HttpStatus.BAD_REQUEST)
       }
-      return true
+      return userData
     } catch (error) {
       return ErrorHandle(error) 
     }
   }
+
+
   @Post('/check/email')
+  @HttpCode(HttpStatus.OK)
   async checkEmail(
     @Req() req: Request,
-    @Body() dto: CreateUserDto,
+    @Body() dto: AuthEmailDto,
   ) {
     try {
       const userData = await this.authService.checkEmail(dto)
       if(!userData) {
         throw new HttpException("User not found with that email.", HttpStatus.BAD_REQUEST)
       }
-      return true
+      return;
     } catch (error) {
       return ErrorHandle(error) 
     }
   }
 
   @Post('/login')
+  @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
   async login(
     @Ip() ip: any,
     @Req() req: Request,
     @Body() dto: CreateUserDto,
-    @Res({ passthrough: true }) response: any,
   ) {
     try {
       const fingerprint = req.headers['fingerprint'];
@@ -74,7 +85,8 @@ export class AuthController {
   }
 
   @Post('/verify/mail')
-  async VerifyMail(@Body() dto: any, @Req() req: any, @Ip() ip: any, @Res() res: any) {
+  @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
+  async VerifyMail(@Body() dto: VerifyMailDto, @Req() req: any, @Ip() ip: any, @Res() res: any) {
     try {
         const userData = await this.authService.verifyOtpMail(
           dto.email,
@@ -104,10 +116,11 @@ export class AuthController {
   }
 
   @Get('/refresh')
+  @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
   async refreshGet(
     @Ip() ip: any,
     @Req() req: any,
-    @Body() dto: any,
+    @Body() dto: RefreshTokenDto,
     @Res({ passthrough: true }) response: any,
   ) {
     try {
@@ -156,7 +169,8 @@ export class AuthController {
   // }
 
  @Post('/reset-password')
- resetPassword(@Body() body: any) {
+ @HttpCode(HttpStatus.OK)
+ resetPassword(@Body() body: AuthEmailDto) {
     try {
         return this.authService.resetPassword(body.email);
     } catch (error) {
@@ -165,7 +179,8 @@ export class AuthController {
   }
 
  @Post('/change-reset-link')
- changeResetPwd(@Body() body: any) {
+ @HttpCode(HttpStatus.OK)
+ changeResetPwd(@Body() body: CheckResetLinkDto) {
     try {
         return this.authService.changeResetPassword(body.email, body.link);
     } catch (error) {
@@ -175,7 +190,8 @@ export class AuthController {
 
   // TODO: Still Need to make it
   @Put('/password')
-  async passwordUpdate(@Body() body: any) {
+  @HttpCode(HttpStatus.OK)
+  async passwordUpdate(@Body() body: ChangePasswordDto) {
     try {
         return this.authService.newResetPassword(body.email, body.password)
     } catch (error) {
