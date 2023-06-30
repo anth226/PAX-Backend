@@ -15,7 +15,7 @@ import { CheckResetLinkDto } from "./entity/dto/check-reset-link.dto";
 import { ChangePasswordDto } from "./entity/dto/change-password.dto";
 import { UserDto } from "../users/dto/user.dto";
 
-@Controller('api/v1/auth')
+@Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,

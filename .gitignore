@@ -36,6 +36,7 @@ lerna-debug.log*
 # env files
 .development.env
 .production.env
+.env
 
 # also 
 src/*.config.orm.ts

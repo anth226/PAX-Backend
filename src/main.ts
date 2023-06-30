@@ -12,7 +12,7 @@ async function bootstrap() {
         origin: process.env.CLIENT_URL,
       },
     });
-    // app.setGlobalPrefix('api');
+    app.setGlobalPrefix('v1');
     const config = new DocumentBuilder()
       .setTitle('API')
       .setVersion('1.0.0')
