@@ -223,7 +223,7 @@ export class AuthService {
         return;
     }
 
-    async changeResetPassword(email: any, resetLink: any) {
+    async checkResetPassword(email: any, resetLink: any) {
         const user = await this.getUserByEmail(email);
         if (!user) {
             throw new BadRequestException('Invalid email');
@@ -234,8 +234,8 @@ export class AuthService {
         return;
     }
 
-    async newResetPassword(email: any, password: any) {
-        const user = await this.userModel.findOneBy({email});
+    async newResetPassword(email: string, password: string, resetLink: string) {
+        const user = await this.userModel.findOneBy({email, resetLink});
         if (!user) {
             throw new BadRequestException('Invalid email');
         }

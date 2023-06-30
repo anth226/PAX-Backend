@@ -5,5 +5,5 @@ export class CheckResetLinkDto {
   email: string;
 
   @ApiProperty({ example: '111', description: "Reset Link Code" })
-  link: string;
+  reset_code: string;
 }

@@ -178,11 +178,11 @@ export class AuthController {
     }
   }
 
- @Post('/change-reset-link')
+ @Post('/check-reset-link')
  @HttpCode(HttpStatus.OK)
- changeResetPwd(@Body() body: CheckResetLinkDto) {
+ checkResetPwd(@Body() body: CheckResetLinkDto) {
     try {
-        return this.authService.changeResetPassword(body.email, body.link);
+        return this.authService.checkResetPassword(body.email, body.reset_code);
     } catch (error) {
         return ErrorHandle(error)
     }
@@ -192,10 +192,13 @@ export class AuthController {
   @Put('/password')
   @HttpCode(HttpStatus.OK)
   async passwordUpdate(@Body() body: ChangePasswordDto) {
+    if(body.password !== body.confirm_password) {
+      throw new HttpException("Password and Confirm Password doesn't match.", HttpStatus.BAD_REQUEST);
+    }
     try {
-        return this.authService.newResetPassword(body.email, body.password)
+        return this.authService.newResetPassword(body.email, body.password, body.reset_code)
     } catch (error) {
-        
+        return ErrorHandle(error)
     }
   }
 }
