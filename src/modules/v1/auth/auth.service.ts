@@ -163,33 +163,79 @@ export class AuthService {
         return tokenData;
     }
 
+    async generateOtpMail(email: string)
+    {
+        const user = await this.userModel.findOneBy({email})
+        if(!user) {
+            throw new HttpException({
+                message: `Invalid Email`,
+            }, HttpStatus.BAD_REQUEST);
+        }
+
+        const otpCode: string = this.generateOTP(6)
+        const message = `Your OTP Code: ${otpCode}`
+        const now = new Date();
+        const expirationInMinute = Number(process.env.OTP_EXPIRATION) ?? 30;
+        const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
+
+        const otpExists = await this.otpModel.findOneBy({email})
+        if(otpExists) {
+            let currentTime = new Date().getTime();
+            let diff: number = Number(otpExists.expiresIn) - currentTime;
+            if(diff>0) {
+                throw new HttpException({
+                    message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
+                }, HttpStatus.BAD_REQUEST);
+            }
+        }
+        await this.mailService.sendMailCode(email, otpCode);
+        if(otpExists) {
+            otpExists.code = otpCode;
+            otpExists.expiresIn = expiresIn;
+            await otpExists.save()
+        } else {
+            await this.otpModel.insert({
+                code: otpCode,
+                expiresIn: expiresIn,
+                email: email
+            })
+        }
+        return {
+            email:email,
+            expiresIn: expiresIn,
+        }
+    }
+
     async verifyOtpMail(
         email: string,
         code: string,
         ip: string,
     ) {
-        let data = await this.otpModel.findOneBy({ email, code });
-        let response: any;
-        if (data) {
-            let currentTime = new Date().getTime();
-            let diff: any = Number(data.expiresIn) - currentTime;
-            if (diff < 0) {
-                throw new HttpException("Code Expired", HttpStatus.BAD_REQUEST)
-            } else {
-                const findUser = await this.getUserByEmail(email);
-                if(!findUser) {
-                    throw new HttpException("Invalid Email", HttpStatus.BAD_REQUEST)
-                }
-                findUser.isActivated = true
-                await findUser.save()
-                const userDataAndTokens = await this.tokenSession(
-                    findUser,
-                    ip,
-                );
-                return userDataAndTokens;
-            }
+
+        const user = await this.userModel.findOneBy({email});
+        if(!user) {
+            throw new HttpException("Email doesn't exists", HttpStatus.BAD_REQUEST)
         }
-        throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
+        const otp = await this.otpModel.findOneBy({email})
+        if(!otp) {
+            throw new HttpException("Invalid Email", HttpStatus.BAD_REQUEST)
+        }
+
+        if(otp.code!=code) {
+            throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
+        }
+
+        let currentTime = new Date().getTime();
+        let diff: number = Number(otp.expiresIn) - currentTime;
+        if(diff<0) {
+            // code expired
+            throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
+        }
+
+        user.isActivated = true
+        await user.save()
+        await otp.remove()
+        return await this.tokenSession(user, ip)
     }
 
     async activateAccount(activationLink: string): Promise<any> {
@@ -357,7 +403,6 @@ export class AuthService {
         }
         return {
             phone:TARGET_PHONE_NUMBER,
-            code: otpCode,
             expiresIn: expiresIn,
         }
     }
@@ -391,6 +436,7 @@ export class AuthService {
         user.phone = TARGET_PHONE_NUMBER
         user.isActivated = true
         await user.save()
+        await otp.remove()
         return await this.tokenSession(user, ip)
     }
 }

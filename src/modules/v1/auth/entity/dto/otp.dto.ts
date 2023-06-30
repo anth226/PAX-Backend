@@ -7,6 +7,12 @@ export class OTPDto {
   phone: string;
 }
 
+export class OTPMailDto {
+  @ApiProperty({ example: 'admin@example.com' })
+  @IsEmail()
+  email: string;
+}
+
 export class OTPVerifyDto {
   @ApiProperty({ example: '+1XXXXXXXXXX' })
   @IsString()

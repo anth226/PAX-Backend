@@ -13,7 +13,7 @@ import { VerifyMailDto } from "./entity/dto/verify-mail.dto";
 import { RefreshTokenDto } from "./entity/dto/refresh-token.dto";
 import { CheckResetLinkDto } from "./entity/dto/check-reset-link.dto";
 import { ChangePasswordDto } from "./entity/dto/change-password.dto";
-import { OTPDto, OTPVerifyDto } from "./entity/dto/otp.dto";
+import { OTPDto, OTPVerifyDto, OTPMailDto } from "./entity/dto/otp.dto";
 
 @Controller('auth')
 export class AuthController {
@@ -77,6 +77,17 @@ export class AuthController {
     }
   }
 
+  @Post('/send/otp/mail')
+  @HttpCode(HttpStatus.OK)
+  async sendOtpMail(@Body() dto: OTPMailDto) {
+    try {
+      await this.authService.generateOtpMail(dto.email);
+      return;
+    } catch (error) {
+      return ErrorHandle(error)
+    }
+  }
+
   @Post('/verify/mail')
   @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
   async VerifyMail(@Body() dto: VerifyMailDto, @Req() req: any, @Ip() ip: any) {
@@ -120,28 +131,12 @@ export class AuthController {
     }
   }
 
-  // @Get('/verify/phone')
-  // async phoneVerify(@Ip() ip: string, @Req() req: any, @Res() res: any) {
-  //   try {
-  //     const verifyResult = await this.authService.phoneVerifyService(
-  //       req.query.phonenumber,
-  //       req.query.code,
-  //       ip,
-  //       req.headers['user-agent'],
-  //       req.headers['fingerprint'],
-  //       req.headers['sec-ch-ua-platform'],
-  //     );
-  //     return verifyResult
-  //   } catch (error) {
-  //     return ErrorHandle(error)
-  //   }
-  // }
-
   @Post('/send/otp/phone')
   @HttpCode(HttpStatus.OK)
   async phoneSendOne(@Body() dto: OTPDto) {
     try {
-      return await this.authService.sendOtpPhone(dto.phone);
+      await this.authService.sendOtpPhone(dto.phone);
+      return;
     } catch (error) {
       return ErrorHandle(error)
     }
