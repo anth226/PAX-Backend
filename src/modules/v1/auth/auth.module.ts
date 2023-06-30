@@ -18,7 +18,7 @@ import { OTPEntity } from './entity/otp.entity';
   providers: [
     AuthService,
     RoleService,
-    MailService,
+    MailService
   ],
   imports: [
     JwtModule.register({

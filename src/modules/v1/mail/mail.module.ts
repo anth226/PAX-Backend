@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MailService } from './mail.service';
 import { MailController } from './mail.controller';
 import { MailerModule } from '@nestjs-modules/mailer';
+import {SES} from 'aws-sdk';
 
 @Module({
   providers: [MailService],
@@ -10,6 +11,11 @@ import { MailerModule } from '@nestjs-modules/mailer';
     MailerModule.forRootAsync({
       useFactory: () => ({
         transport: {
+          SES: new SES({
+            region: process.env.AWS_SES_REGION,
+            accessKeyId: process.env.AWS_SES_ACCESS_KEY,
+            secretAccessKey: process.env.AWS_SES_SECRET_KEY,
+          }),
           host: process.env.SMTP_HOST,
           port: Number(process.env.SMTP_PORT),
           secure: process.env.NODE_ENV !== 'development',

@@ -8,7 +8,7 @@ export class MailService {
     try {
       this.mailerService.sendMail({
         to: toEmail, // list of receivers
-        from: process.env.SMTP_USER, // sender address
+        from: process.env.AWS_SENDER_EMAIL, // sender address
         subject: `Account activation on ${process.env.CLIENT_URL} ✔`,
         text: '',
         html: `
@@ -33,7 +33,7 @@ export class MailService {
     try {
       this.mailerService.sendMail({
         to: toEmail, // list of receivers
-        from: process.env.SMTP_USER, // sender address
+        from: process.env.AWS_SENDER_EMAIL, // sender address
         subject: `confirmation code`, // Subject of the email
         text: '', // plaintext body
         html: `
@@ -51,7 +51,7 @@ export class MailService {
     try {
       await this.mailerService.sendMail({
         to: toEmail,
-        from: process.env.SMTP_USER,
+        from: process.env.AWS_SENDER_EMAIL,
         subject: `Create a new password for your account ${process.env.API_URL} ✔`,
         text: '',
         html: `

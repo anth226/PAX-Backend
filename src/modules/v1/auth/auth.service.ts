@@ -218,6 +218,8 @@ export class AuthService {
         const linkReset = uuidv4();
         const forgotLink = `${process.env.CLIENT_URL}/resetpwd?link=${linkReset}`;
         await this.mailService.sendMailPasswordCreation(email, forgotLink);
+        user.resetLink = linkReset
+        await user.save()
         return;
     }
 
