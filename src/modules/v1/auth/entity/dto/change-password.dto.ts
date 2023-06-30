@@ -3,10 +3,6 @@ import { IsEmail, IsString, Matches } from 'class-validator';
 import { Match } from 'src/custom-decorators/match.decorator';
 
 export class ChangePasswordDto {
-  @ApiProperty({ example: 'example@example.com'})
-  @IsEmail()
-  email: string;
-
   @ApiProperty({ example: '111slldfe', description: "Reset Link Code" })
   @IsString()
   reset_code: string;

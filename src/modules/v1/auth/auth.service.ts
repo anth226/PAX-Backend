@@ -38,13 +38,15 @@ export class AuthService {
         }
         var salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(userData.password, salt);
+        const activationLink = uuidv4();
         await this.userModel.insert({
             email:userData.email,
             password: hashPassword,
-            isActivated: true,
-            phone: userData.phone ?? null
+            isActivated: false,
+            phone: userData.phone ?? null,
+            activationLink
         })
-        const link = `${process.env.CLIENT_URL}/signin/activate`
+        const link = `${process.env.CLIENT_URL}/signin/activate?code=${activationLink}`
         await this.mailService.sendActivationMail(userData.email, link, userData.password)
         return userData;
     }
@@ -264,10 +266,10 @@ export class AuthService {
         return;
     }
 
-    async checkResetPassword(email: any, resetLink: any) {
-        const user = await this.getUserByEmail(email);
+    async checkResetPassword(resetLink: any) {
+        const user = await this.userModel.findOneBy({resetLink});
         if (!user) {
-            throw new BadRequestException('Invalid email');
+            throw new BadRequestException('Invalid Reset Link');
         }
         if (resetLink && user.resetLink !== resetLink) {
             throw new BadRequestException('Invalid Reset Link');
@@ -275,10 +277,10 @@ export class AuthService {
         return;
     }
 
-    async newResetPassword(email: string, password: string, resetLink: string) {
-        const user = await this.userModel.findOneBy({email, resetLink});
+    async newResetPassword(password: string, resetLink: string) {
+        const user = await this.userModel.findOneBy({resetLink});
         if (!user) {
-            throw new BadRequestException('Invalid email or code');
+            throw new BadRequestException('Invalid link');
         }
         var salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(password, salt);

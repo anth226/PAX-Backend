@@ -166,7 +166,7 @@ export class AuthController {
  @HttpCode(HttpStatus.OK)
  checkResetPwd(@Body() body: CheckResetLinkDto) {
     try {
-        return this.authService.checkResetPassword(body.email, body.reset_code);
+        return this.authService.checkResetPassword(body.reset_code);
     } catch (error) {
         return ErrorHandle(error)
     }
@@ -177,7 +177,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async passwordUpdate(@Body() body: ChangePasswordDto) {
     try {
-        return this.authService.newResetPassword(body.email, body.password, body.reset_code)
+        return this.authService.newResetPassword(body.password, body.reset_code)
     } catch (error) {
         return ErrorHandle(error)
     }

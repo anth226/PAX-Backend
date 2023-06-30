@@ -52,7 +52,7 @@ export class MailService {
       await this.mailerService.sendMail({
         to: toEmail,
         from: process.env.AWS_SENDER_EMAIL,
-        subject: `Create a new password for your account ${process.env.API_URL} ✔`,
+        subject: `Create a new password for your account ${process.env.APP_NAME} ✔`,
         text: '',
         html: `
         <div>
