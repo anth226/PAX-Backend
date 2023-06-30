@@ -44,6 +44,8 @@ export class AuthService {
             isActivated: true,
             phone: userData.phone ?? null
         })
+        const link = `${process.env.CLIENT_URL}/signin/activate`
+        await this.mailService.sendActivationMail(userData.email, link, userData.password)
         return userData;
     }
 
