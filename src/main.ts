@@ -19,7 +19,7 @@ async function bootstrap() {
       .setExternalDoc('For more information', 'http://swagger.io')
       .build(); // openapi info
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('/api/docs', app, document);
+    SwaggerModule.setup('/docs', app, document);
     await app.listen(PORT);
     console.log(`Server started on port - ${PORT}`);
   } catch (error) {
