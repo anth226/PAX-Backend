@@ -61,19 +61,12 @@ export class AuthController {
   @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
   async login(
     @Ip() ip: any,
-    @Req() req: Request,
     @Body() dto: CreateUserDto,
   ) {
     try {
-      const fingerprint = req.headers['fingerprint'];
-      const os = req.headers['sec-ch-ua-platform'];
-      const ua = req.headers['user-agent'];
       const userData = await this.authService.login(
         dto,
-        ip,
-        ua,
-        fingerprint,
-        os,
+        ip
       );
       if (userData.user.isActivated === false) {
         throw new HttpException("User is not activated.", HttpStatus.BAD_REQUEST)
@@ -92,9 +85,6 @@ export class AuthController {
           dto.email,
           dto.code,
           ip,
-          req.headers['user-agent'],
-          req.headers['fingerprint'],
-          req.headers['sec-ch-ua-platform'],
         );
         return userData;
     } catch (error) {
@@ -102,18 +92,18 @@ export class AuthController {
     }
   }
 
-  @Get('/activate/:link')
-  @Redirect(process.env.CLIENT_URL, 302)
-  async activate(@Param('link') activationLink: string) {
-    try {
-      const authLink = await this.authService.activateAccount(activationLink);
-      if (authLink.isActivated) {
-        return { url: process.env.CLIENT_URL };
-      }
-    } catch (error) {
-      return ErrorHandle(error)
-    }
-  }
+  // @Get('/activate/:link')
+  // @Redirect(process.env.CLIENT_URL, 302)
+  // async activate(@Param('link') activationLink: string) {
+  //   try {
+  //     const authLink = await this.authService.activateAccount(activationLink);
+  //     if (authLink.isActivated) {
+  //       return { url: process.env.CLIENT_URL };
+  //     }
+  //   } catch (error) {
+  //     return ErrorHandle(error)
+  //   }
+  // }
 
   @Get('/refresh')
   @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
@@ -124,17 +114,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: any,
   ) {
     try {
-        const os = req.headers['sec-ch-ua-platform'];
-        const fingerprint = req.headers['fingerprint'];
-
-        const userData = await this.authService.refreshToken(
-        dto.refreshToken,
-        ip,
-        req.headers['user-agent'],
-        os,
-        response,
-        fingerprint,
-        );
+        const userData = await this.authService.refreshToken(dto.refreshToken, ip);
         return userData;
     } catch (error) {
       return ErrorHandle(error)
@@ -192,9 +172,6 @@ export class AuthController {
   @Put('/password')
   @HttpCode(HttpStatus.OK)
   async passwordUpdate(@Body() body: ChangePasswordDto) {
-    if(body.password !== body.confirm_password) {
-      throw new HttpException("Password and Confirm Password doesn't match.", HttpStatus.BAD_REQUEST);
-    }
     try {
         return this.authService.newResetPassword(body.email, body.password, body.reset_code)
     } catch (error) {

@@ -52,7 +52,7 @@ export class AuthService {
         }
     }
 
-    async login(userData: any, ip: string, ua: any, fingerprint: any, os: any) {
+    async login(userData: any, ip: string) {
         try {
             const user = await this.validateUser(userData);
             if (user.banned) {
@@ -60,7 +60,7 @@ export class AuthService {
                     message: `You are banned: ${user.banReason}`,
                 });
             }
-            const userDataAndTokens = await this.tokenSession(user, ip, ua, fingerprint, os);
+            const userDataAndTokens = await this.tokenSession(user, ip);
             return userDataAndTokens;
         } catch (error) {
             throw new HttpException(error.message, 500)
@@ -84,7 +84,7 @@ export class AuthService {
         }
     }
 
-    async tokenSession(userData: any, ip: string, ua: any, fingerprint?: any, os?: any) {
+    async tokenSession(userData: any, ip: string) {
         if (!userData) {
             throw new UnauthorizedException({
                 message: 'The user with the given ID is not in the database',
@@ -97,7 +97,7 @@ export class AuthService {
         }
         const userDto = new UserDto(userData);
         const tokens = await this.generateToken({ ...userDto });
-        await this.saveToken(userData.id, tokens.refreshToken, ip, ua, os, fingerprint);
+        await this.saveToken(userData.id, tokens.refreshToken, ip);
         return {
             statusCode: HttpStatus.OK,
             message: 'User information',
@@ -133,23 +133,17 @@ export class AuthService {
         userId: any,
         refreshToken: string,
         ip: string,
-        ua: any,
-        os?: any,
-        fingerprint?: any,
     ) {
         // if (!fingerprint) {
         //     throw new HttpException(`Missing browser fingerprint!`, HttpStatus.BAD_REQUEST);
         // }
-        const hasToken = await this.tokenModel.findOneBy({ user: userId, fingerprint });
+        const hasToken = await this.tokenModel.findOneBy({ user: userId });
         // create a token from scratch for a new user or after deleting an old token
         if (!hasToken) {
             const createdToken = this.tokenModel.create({
                 user: userId,
                 refreshToken,
                 ip,
-                ua,
-                os,
-                fingerprint,
                 expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
             });
             return await this.tokenModel.save(createdToken);
@@ -168,11 +162,8 @@ export class AuthService {
         email: string,
         code: string,
         ip: string,
-        ua: string,
-        fingerprint: string,
-        os: string,
     ) {
-        let data = await this.otpModel.findOneBy({ email, code, fingerprint });
+        let data = await this.otpModel.findOneBy({ email, code });
         let response: any;
         if (data) {
             let currentTime = new Date().getTime();
@@ -184,12 +175,11 @@ export class AuthService {
                 if(!findUser) {
                     throw new HttpException("Invalid Email", HttpStatus.BAD_REQUEST)
                 }
+                findUser.isActivated = true
+                await findUser.save()
                 const userDataAndTokens = await this.tokenSession(
                     findUser,
                     ip,
-                    ua,
-                    fingerprint,
-                    os,
                 );
                 return userDataAndTokens;
             }
@@ -237,11 +227,12 @@ export class AuthService {
     async newResetPassword(email: string, password: string, resetLink: string) {
         const user = await this.userModel.findOneBy({email, resetLink});
         if (!user) {
-            throw new BadRequestException('Invalid email');
+            throw new BadRequestException('Invalid email or code');
         }
         var salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(password, salt);
         user.password = hashPassword;
+        user.resetLink = null;
         await user.save();
         return;
     }
@@ -249,10 +240,6 @@ export class AuthService {
     async refreshToken(
         refreshtoken: string,
         ip: string,
-        ua: any,
-        os: any,
-        res: any,
-        fingerprint: any,
     ) {
         if (!refreshtoken) {
             throw new UnauthorizedException({ message: 'User not authorized' });
@@ -269,7 +256,7 @@ export class AuthService {
         if (user.banned){
             throw new UnauthorizedException({message: `User is banned.`});
         }
-        const userDataAndTokens = await this.tokenSession(user, ip, ua, fingerprint, os);
+        const userDataAndTokens = await this.tokenSession(user, ip);
         return userDataAndTokens;
     }
 
