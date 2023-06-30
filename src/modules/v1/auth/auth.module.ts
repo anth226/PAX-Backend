@@ -12,13 +12,15 @@ import { UserEntity } from '../users/entity/user.entity';
 import { UserRoleEntity } from '../roles/entity/user-role.entity';
 import { RoleEntity } from '../roles/entity/role.entity';
 import { OTPEntity } from './entity/otp.entity';
+import { PhoneService } from '../phone/phone.service';
 
 @Module({
   controllers: [AuthController],
   providers: [
     AuthService,
     RoleService,
-    MailService
+    MailService,
+    PhoneService,    
   ],
   imports: [
     JwtModule.register({

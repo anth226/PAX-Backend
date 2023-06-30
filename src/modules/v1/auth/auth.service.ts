@@ -11,6 +11,8 @@ import { JwtService } from '@nestjs/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import * as jwt from 'jsonwebtoken';
 import { MailService } from '../mail/mail.service';
+import { PhoneService } from '../phone/phone.service';
+import { CreateUserDto } from '../users/dto/create-user.dto';
 
 
 @Injectable()
@@ -24,12 +26,12 @@ export class AuthService {
     // private roleService: RoleService,
     private jwtService: JwtService,
     private mailService: MailService,
-    // private phoneService: PhoneService,
+    private phoneService: PhoneService,
     // private readonly client: TwilioClient,
     private connection: Connection, // TypeORM transactions.
   ) {}
 
-    async register(userData:any) {
+    async register(userData:CreateUserDto) {
         const user = await this.userModel.findOneBy({email: userData.email});
         if (user) {
             throw new BadRequestException('email already exists.');
@@ -39,7 +41,8 @@ export class AuthService {
         await this.userModel.insert({
             email:userData.email,
             password: hashPassword,
-            isActivated: true
+            isActivated: true,
+            phone: userData.phone ?? null
         })
         return userData;
     }
@@ -289,51 +292,103 @@ export class AuthService {
         }
     }
 
-    // async sendPhone(TARGET_PHONE_NUMBER: string) {
-    //     return await this.phoneService.sendPhoneSMS(TARGET_PHONE_NUMBER);
-    // }
+    private generateOTP(length=4) {
+        const chars = '0123456789';
+        const charsLength = chars.length;
+        let otp = '';
 
-    // async phoneVerifyService(
-    //     TARGET_PHONE_NUMBER: string,
-    //     code: string,
-    //     ip: string,
-    //     ua: string,
-    //     fingerprint: string,
-    //     os: string,
-    // ) {
-    //     try {
-    //         const result = await this.phoneService.verify(TARGET_PHONE_NUMBER, code);
-    //         const hasPhone = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER});
-    //         let createUser: UserEntity;
-    //         if (result.valid) {
-    //             if (!hasPhone) {
-    //                 // user creation
-    //                 createUser = new UserEntity();
-    //                 createUser.phone = TARGET_PHONE_NUMBER;
-    //                 createUser.isActivated = true;
-    //                 await createUser.save();
-    //             }
-    //             const userDataAndTokens = await this.tokenSession(
-    //                 hasPhone ?? createUser,
-    //                 ip,
-    //                 ua,
-    //                 fingerprint,
-    //                 os,
-    //             );
-    //             return {
-    //                 message: 'User is Verified!!',
-    //                 status: result.status,
-    //                 valid: result.valid,
-    //                 dateCreated: result.dateCreated,
-    //                 dateUpdated: result.dateUpdated,
-    //                 ...userDataAndTokens,
-    //             };
-    //         }
-    //         throw new HttpException("Invalid Code", HttpStatus.BAD_REQUEST)
-    //     } catch (error) {
-    //         throw new UnauthorizedException({
-    //             message: 'Server Error',
-    //         });
-    //     }
-    // }
+        for (let i = 0; i < length; i++) {
+            const randomIndex = Math.floor(Math.random() * charsLength);
+            otp += chars[randomIndex];
+        }
+
+        return otp;
+    }
+
+    private formatTimeDuration(timeDifference:number) {
+        const minutes = Math.floor(timeDifference / (1000 * 60));
+        const seconds = Math.floor((timeDifference % (1000 * 60)) / 1000);
+
+        if (minutes > 0) {
+            return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        } else {
+            return `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        }
+    }
+
+
+    async sendOtpPhone(TARGET_PHONE_NUMBER: string) {
+        const user = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER})
+        if(!user) {
+            throw new HttpException({
+                message: `Invalid Email`,
+            }, HttpStatus.BAD_REQUEST);
+        }
+
+        const otpCode: string = this.generateOTP(6)
+        const message = `Your OTP Code: ${otpCode}`
+        const now = new Date();
+        const expirationInMinute = Number(process.env.OTP_EXPIRATION) ?? 30;
+        const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
+
+        const otpExists = await this.otpModel.findOneBy({phone:TARGET_PHONE_NUMBER})
+        if(otpExists) {
+            let currentTime = new Date().getTime();
+            let diff: number = Number(otpExists.expiresIn) - currentTime;
+            if(diff>0) {
+                throw new HttpException({
+                    message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
+                }, HttpStatus.BAD_REQUEST);
+            }
+        }
+        await this.phoneService.sendPhoneSMS(TARGET_PHONE_NUMBER, message);
+        if(otpExists) {
+            otpExists.code = otpCode;
+            otpExists.expiresIn = expiresIn;
+            await otpExists.save()
+        } else {
+            await this.otpModel.insert({
+                code: otpCode,
+                expiresIn: expiresIn,
+                phone: TARGET_PHONE_NUMBER
+            })
+        }
+        return {
+            phone:TARGET_PHONE_NUMBER,
+            code: otpCode,
+            expiresIn: expiresIn,
+        }
+    }
+
+    async phoneVerifyService(
+        TARGET_PHONE_NUMBER: string,
+        code: string,
+        ip: string
+    ) {
+        // const result = await this.phoneService.verify(TARGET_PHONE_NUMBER, code);
+        const user = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER});
+        if(!user) {
+            throw new HttpException("Phone Number doesn't exists", HttpStatus.BAD_REQUEST)
+        }
+        const otp = await this.otpModel.findOneBy({phone: TARGET_PHONE_NUMBER})
+        if(!otp) {
+            throw new HttpException("Invalid Phone Number", HttpStatus.BAD_REQUEST)
+        }
+
+        if(otp.code!=code) {
+            throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
+        }
+
+        let currentTime = new Date().getTime();
+        let diff: number = Number(otp.expiresIn) - currentTime;
+        if(diff<0) {
+            // code expired
+            throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
+        }
+
+        user.phone = TARGET_PHONE_NUMBER
+        user.isActivated = true
+        await user.save()
+        return await this.tokenSession(user, ip)
+    }
 }

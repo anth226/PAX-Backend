@@ -12,9 +12,9 @@ import {SES} from 'aws-sdk';
       useFactory: () => ({
         transport: {
           SES: new SES({
-            region: process.env.AWS_SES_REGION,
-            accessKeyId: process.env.AWS_SES_ACCESS_KEY,
-            secretAccessKey: process.env.AWS_SES_SECRET_KEY,
+            region: process.env.AWS_REGION,
+            accessKeyId: process.env.AWS_ACCESS_KEY,
+            secretAccessKey: process.env.AWS_SECRET_KEY,
           }),
           host: process.env.SMTP_HOST,
           port: Number(process.env.SMTP_PORT),

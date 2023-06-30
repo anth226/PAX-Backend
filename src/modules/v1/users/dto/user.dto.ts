@@ -72,6 +72,13 @@ export class UserDto {
   namePreferred: string;
 
   @ApiProperty({
+    description: 'Phone Number',
+    example: '+1XXXXXXXXXX',
+  })
+  @IsString()
+  phone: string;
+
+  @ApiProperty({
     description: 'The prefix of the user\'s name',
     example: 'Mr.',
   })
@@ -121,5 +128,6 @@ export class UserDto {
     this.nameMiddle = model.nameMiddle;
     this.nameLast = model.nameLast;
     this.nameSuffix = model.nameSuffix;
+    this.phone = model.phone;
   }  
 }

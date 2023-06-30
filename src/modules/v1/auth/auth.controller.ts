@@ -4,7 +4,7 @@ import { UserEntity } from "../users/entity/user.entity";
 import { Repository } from "typeorm";
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateUserDto } from "../users/dto/create-user.dto";
-import { ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiResponse } from '@nestjs/swagger';
 import { ErrorHandle } from "src/exceptions/ErrorHandle";
 import { Request } from "express";
 import { AuthEmailDto } from "./entity/dto/auth-email.dto";
@@ -13,7 +13,7 @@ import { VerifyMailDto } from "./entity/dto/verify-mail.dto";
 import { RefreshTokenDto } from "./entity/dto/refresh-token.dto";
 import { CheckResetLinkDto } from "./entity/dto/check-reset-link.dto";
 import { ChangePasswordDto } from "./entity/dto/change-password.dto";
-import { UserDto } from "../users/dto/user.dto";
+import { OTPDto, OTPVerifyDto } from "./entity/dto/otp.dto";
 
 @Controller('auth')
 export class AuthController {
@@ -79,7 +79,7 @@ export class AuthController {
 
   @Post('/verify/mail')
   @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
-  async VerifyMail(@Body() dto: VerifyMailDto, @Req() req: any, @Ip() ip: any, @Res() res: any) {
+  async VerifyMail(@Body() dto: VerifyMailDto, @Req() req: any, @Ip() ip: any) {
     try {
         const userData = await this.authService.verifyOtpMail(
           dto.email,
@@ -111,7 +111,6 @@ export class AuthController {
     @Ip() ip: any,
     @Req() req: any,
     @Body() dto: RefreshTokenDto,
-    @Res({ passthrough: true }) response: any,
   ) {
     try {
         const userData = await this.authService.refreshToken(dto.refreshToken, ip);
@@ -138,15 +137,25 @@ export class AuthController {
   //   }
   // }
 
-  // @Post('/send_one/phone')
-  // async phoneSendOne(@Req() req: any, @Res() res: any) {
-  //   try {
-  //     const sendSMS = await this.authService.sendPhone(req.body.number);
-  //     return sendSMS;
-  //   } catch (error) {
-  //     return ErrorHandle(error)
-  //   }
-  // }
+  @Post('/send/otp/phone')
+  @HttpCode(HttpStatus.OK)
+  async phoneSendOne(@Body() dto: OTPDto) {
+    try {
+      return await this.authService.sendOtpPhone(dto.phone);
+    } catch (error) {
+      return ErrorHandle(error)
+    }
+  }
+
+  @Post('/verify/otp/phone')
+  @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
+  async verifyOtpPhone(@Body() dto: OTPVerifyDto, @Ip() ip: any,) {
+    try {
+      return await this.authService.phoneVerifyService(dto.phone, dto.code, ip);
+    } catch (error) {
+      return ErrorHandle(error)
+    }
+  }
 
  @Post('/reset-password')
  @HttpCode(HttpStatus.OK)
