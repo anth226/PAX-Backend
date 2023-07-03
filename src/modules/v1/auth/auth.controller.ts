@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Ip, Post, Req, Res, Get, Redirect, Param, Put, HttpCode } from "@nestjs/common";
+import { Body, Controller, HttpException, HttpStatus, Ip, Post, Req, Res, Get, Headers, Redirect, Param, Put, HttpCode, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { UserEntity } from "../users/entity/user.entity";
 import { Repository } from "typeorm";
@@ -14,6 +14,8 @@ import { RefreshTokenDto } from "./entity/dto/refresh-token.dto";
 import { CheckResetLinkDto } from "./entity/dto/check-reset-link.dto";
 import { ChangePasswordDto } from "./entity/dto/change-password.dto";
 import { OTPDto, OTPVerifyDto, OTPMailDto } from "./entity/dto/otp.dto";
+import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
+import {Response} from 'express'
 
 @Controller('auth')
 export class AuthController {
@@ -62,18 +64,28 @@ export class AuthController {
   async login(
     @Ip() ip: any,
     @Body() dto: CreateUserDto,
+    @Headers() headers: Record<string, string>,
+    @Res() res: Response,
+    @Req() req: Request
   ) {
     try {
+      await this.authService.limitLogin(dto.email, ip)
+      const ua = headers['user-agent'];
+      const method = req.method
       const userData = await this.authService.login(
+        req,
         dto,
-        ip
+        ip,
+        ua,
+        method
       );
-      if (userData.user.isActivated === false) {
-        throw new HttpException("User is not activated.", HttpStatus.BAD_REQUEST)
-      }
-      return userData;
+      res.status(200).json(userData)
     } catch (error) {
-      return ErrorHandle(error)
+      if(error?.response?.msBeforeNext) {
+        res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
+        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+      }
+      return res.status(500).json({"message": error.message, statusCode: 500});
     }
   }
 
@@ -90,16 +102,27 @@ export class AuthController {
 
   @Post('/verify/mail')
   @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
-  async VerifyMail(@Body() dto: VerifyMailDto, @Req() req: any, @Ip() ip: any) {
+  async VerifyMail(
+    @Body() dto: VerifyMailDto,
+    @Req() req: Request,
+    @Ip() ip: any,
+    @Res() res: Response
+    ) {
     try {
-        const userData = await this.authService.verifyOtpMail(
-          dto.email,
-          dto.code,
-          ip,
-        );
-        return userData;
+      await this.authService.limitLogin(dto.email, ip)
+      const userData = await this.authService.verifyOtpMail(
+        req,
+        dto.email,
+        dto.code,
+        ip,
+      );
+      return res.status(200).json(userData)
     } catch (error) {
-        return ErrorHandle(error)
+      if(error?.response?.msBeforeNext) {
+        res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
+        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+      }
+      return res.status(500).json({"message": error.message, statusCode: 500});
     }
   }
 
@@ -120,11 +143,11 @@ export class AuthController {
   @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
   async refreshGet(
     @Ip() ip: any,
-    @Req() req: any,
+    @Req() req: Request,
     @Body() dto: RefreshTokenDto,
   ) {
     try {
-        const userData = await this.authService.refreshToken(dto.refreshToken, ip);
+        const userData = await this.authService.refreshToken(req, dto.refreshToken, ip);
         return userData;
     } catch (error) {
       return ErrorHandle(error)
@@ -143,12 +166,23 @@ export class AuthController {
   }
 
   @Post('/verify/otp/phone')
-  @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
-  async verifyOtpPhone(@Body() dto: OTPVerifyDto, @Ip() ip: any,) {
+  @ApiResponse({status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
+  async verifyOtpPhone(
+    @Req() req: Request,
+    @Body() dto: OTPVerifyDto,
+    @Ip() ip: any,
+    @Res() res: Response
+    ) {
     try {
-      return await this.authService.phoneVerifyService(dto.phone, dto.code, ip);
+      await this.authService.limitLogin(dto.phone, ip)
+      const userData = await this.authService.phoneVerifyService(req, dto.phone, dto.code, ip);
+      res.status(200).json(userData)
     } catch (error) {
-      return ErrorHandle(error)
+      if(error?.response?.msBeforeNext) {
+        res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
+        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+      }
+      return res.status(500).json({"message": error.message, statusCode: 500});
     }
   }
 

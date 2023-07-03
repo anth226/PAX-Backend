@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable, UnauthorizedException, HttpException, MethodNotAllowedException, BadRequestException } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import { Connection, Repository } from 'typeorm';
+import { Connection, MoreThan, Repository } from 'typeorm';
 import { UserEntity } from '../users/entity/user.entity';
 import { OTPEntity } from './entity/otp.entity';
 import { RefreshTokenSessionsEntity } from './entity/refresh-token.entity';
@@ -13,14 +13,29 @@ import * as jwt from 'jsonwebtoken';
 import { MailService } from '../mail/mail.service';
 import { PhoneService } from '../phone/phone.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
+import { LoginAttemptEntity } from './entity/login-attempt.entity';
+import { LoggingService } from './login-logging.service';
+import { TwoFactorMethodEntity } from './entity/two-factor.entity';
+import { InjectRedis, Redis } from "@nestjs-modules/ioredis";
+import { RateLimiterRedis} from "rate-limiter-flexible";
+import {Request} from 'express'
+
+const softLockoutTime = Number(process.env.SOFT_PW_LOCKOUT_MINUTES) || 5;
+const softLockoutTries = Number(process.env.SOFT_PW_LOCKOUT_TRIES) || 5;
+const hardLockoutTime = Number(process.env.HARD_PW_LOCKOUT_HOURS) || 1;
+const hardLockoutTries = Number(process.env.HARD_PW_LOCKOUT_TRIES) || 20;
 
 
 @Injectable()
 export class AuthService {
+    private softLoginLimit;
+    private hardLoginLimit;
   constructor(
     @InjectRepository(UserEntity) private readonly userModel: Repository<UserEntity>,
     @InjectRepository(UserRoleEntity) private readonly userRoleModel: Repository<UserRoleEntity>,
     @InjectRepository(OTPEntity) private readonly otpModel: Repository<OTPEntity>,
+    @InjectRepository(LoginAttemptEntity) private readonly loginAttemptModel: Repository<LoginAttemptEntity>,
+    @InjectRepository(TwoFactorMethodEntity) private readonly towFaModel: Repository<TwoFactorMethodEntity>,
     @InjectRepository(RefreshTokenSessionsEntity)
     private readonly tokenModel: Repository<RefreshTokenSessionsEntity>,
     // private roleService: RoleService,
@@ -29,7 +44,24 @@ export class AuthService {
     private phoneService: PhoneService,
     // private readonly client: TwilioClient,
     private connection: Connection, // TypeORM transactions.
-  ) {}
+    private readonly loggingService: LoggingService,
+    @InjectRedis() private readonly redis: Redis
+  ) {
+    this.softLoginLimit = new RateLimiterRedis({
+      storeClient: this.redis,
+      keyPrefix: 'login_fail_soft',
+      points: softLockoutTries,
+      duration: softLockoutTime*60,
+      blockDuration: softLockoutTime*60, // Block for X minutes
+    })
+    this.hardLoginLimit = new RateLimiterRedis({
+      storeClient: this.redis,
+      keyPrefix: 'login_fail_hard',
+      points: hardLockoutTries,
+      duration: hardLockoutTime*60*60,
+      blockDuration: hardLockoutTime*60*60, // Block for X minutes
+    })
+  }
 
     async register(userData:CreateUserDto) {
         const user = await this.userModel.findOneBy({email: userData.email});
@@ -59,22 +91,27 @@ export class AuthService {
         }
     }
 
-    async login(userData: any, ip: string) {
+    async login(req: Request, userData: any, ip: string, ua: string, method: string) {
         try {
-            const user = await this.validateUser(userData);
+            const user: UserEntity = await this.validateUser(userData, ip);
             if (user.banned) {
                 throw new UnauthorizedException({
-                    message: `You are banned: ${user.banReason}`,
+                    message: `You are banned`,
                 });
             }
-            const userDataAndTokens = await this.tokenSession(user, ip);
+            if (!user.isActivated) {
+                throw new HttpException("User is not activated.", HttpStatus.BAD_REQUEST)
+            }
+            const userDataAndTokens = await this.tokenSession(req, user, ip);
+            await this.loggingService.logSuccessfulLogin(user, ip, ua, method, false)
+            await this.removeLimit(user.email, ip)
             return userDataAndTokens;
         } catch (error) {
-            throw new HttpException(error.message, 500)
+            throw new HttpException(error.response ?? error, error.status ?? 500)
         }
     }
 
-    async validateUser(userData: any): Promise<any> {
+    async validateUser(userData: any, ip: string): Promise<any> {
         try {
             const user = await this.getUserByEmail(userData.email);
             if (!user) {
@@ -83,28 +120,73 @@ export class AuthService {
                 }, HttpStatus.BAD_REQUEST);
             }
             const isPasswordEquals = await bcrypt.compare(userData.password, user.password);
-            if (!isPasswordEquals) throw new HttpException({ message: `Incorrect Password` }, HttpStatus.BAD_REQUEST);
+            if (!isPasswordEquals) {
+                // Consume 1 point from limiters on wrong attempt and block if limits reached
+                await Promise.all([
+                  this.softLoginLimit.consume(this.getUsernameIPkey(user.email, ip)),
+                  this.hardLoginLimit.consume(ip)
+                ])
+                throw new HttpException({ message: `Incorrect Password`, isPasswordFailed: true }, HttpStatus.BAD_REQUEST);
+            }
             const { password, ...result } = user;
             return result;
         } catch (error) {
-            throw new Error(error)
+            if(error?.msBeforeNext) {
+                throw new HttpException({"message": "Too Many Requests", msBeforeNext: error.msBeforeNext}, 429);
+            }
+            throw error;
         }
     }
 
-    async tokenSession(userData: any, ip: string) {
+    async turnOnTwoFactorAuthentication(userId: number) {
+        const user = await this.userModel.findOneBy({id: userId})
+        if(!user) {
+            throw new UnauthorizedException({
+                message: 'The user with the given ID is not in the database',
+            });
+        }
+        user.isTwoFactorAuthenticationEnabled = true;
+        await user.save();
+        return;
+    }
+
+    async addTwoFactorAuthenticationMethod(userId:number, methodType:string, methodDetail: string) {
+        const user = await this.userModel.findOne({where: {id: userId}, relations:["twoFactorMethods"]})
+        if(!user) {
+            throw new UnauthorizedException({
+                message: 'The user with the given ID is not in the database',
+            });
+        }
+        let method = user.twoFactorMethods.find(method => method.methodType === methodType);
+        if(method) {
+            method.methodDetail = methodDetail
+        } else {
+            // Method doesn't exist, create a new entry
+            method = new TwoFactorMethodEntity();
+            method.methodType = methodType;
+            method.methodDetail = methodDetail;
+            method.user = user;
+            user.twoFactorMethods.push(method);
+            user.defaultTwoFactorMethod = method
+        }
+        await this.userModel.save(user);
+        return;
+    }
+
+    async tokenSession(req: Request, userData: any, ip: string) {
         if (!userData) {
             throw new UnauthorizedException({
                 message: 'The user with the given ID is not in the database',
             });
         }
         // pulling out roles for results
-        if (!userData.roles) {
-            const userRoles = await this.connection.getRepository(UserRoleEntity).createQueryBuilder('user-roles').innerJoinAndSelect('user-roles.role', 'role').where('user-roles.userId = :id', {id: userData.id}).getMany()
-            userData.roles = userRoles.map(userRoles => userRoles.role);
-        }
+        // if (!userData.roles) {
+        //     const userRoles = await this.connection.getRepository(UserRoleEntity).createQueryBuilder('user-roles').innerJoinAndSelect('user-roles.role', 'role').where('user-roles.userId = :id', {id: userData.id}).getMany()
+        //     userData.roles = userRoles.map(userRoles => userRoles.role);
+        // }
         const userDto = new UserDto(userData);
         const tokens = await this.generateToken({ ...userDto });
-        await this.saveToken(userData.id, tokens.refreshToken, ip);
+        await this.saveToken(req, {accessToken: tokens.accessToken, refreshToken:tokens.refreshToken});
         return {
             statusCode: HttpStatus.OK,
             message: 'User information',
@@ -116,8 +198,36 @@ export class AuthService {
 
 
     async getUserByEmail(email: string) {
-        const user = await this.userModel.findOneBy({ email });
+        const user = await this.userModel.findOne({where: {email}, relations:['loginAttempts']});
         return user;
+    }
+
+    async limitLogin(username:string, ip:string) {
+        const usernameIPkey = this.getUsernameIPkey(username, ip)
+        const [softLimitResponse, hardLimitResponse] = await Promise.all([
+            this.softLoginLimit.get(usernameIPkey),
+            this.hardLoginLimit.get(ip)
+        ]);
+        if(softLimitResponse && softLimitResponse.consumedPoints>softLockoutTries) {
+            throw new HttpException({"message": "Too Many Requests", msBeforeNext: softLimitResponse.msBeforeNext}, 429);
+        }
+        if(hardLimitResponse && hardLimitResponse.consumedPoints>hardLockoutTries) {
+            throw new HttpException({"message": "Too Many Requests", msBeforeNext: hardLimitResponse.msBeforeNext}, 429);
+        }
+        return;
+    }
+
+    async removeLimit(username:string, ip:string) {
+        const usernameIPkey = this.getUsernameIPkey(username, ip)
+        await this.softLoginLimit.delete(usernameIPkey);
+    }
+
+    async removeHardLimit(ip:string) {
+        await this.softLoginLimit.delete(ip);
+    }
+
+    getUsernameIPkey(username: string, ip: string): string {
+        return`${username}_${ip}`;
     }
 
     async generateToken(user: any) {
@@ -137,27 +247,44 @@ export class AuthService {
     }
 
     async saveToken(
-        userId: any,
-        refreshToken: string,
-        ip: string,
+        req: Request,
+        { accessToken, refreshToken }: { accessToken: string, refreshToken?: string}
     ) {
         // if (!fingerprint) {
         //     throw new HttpException(`Missing browser fingerprint!`, HttpStatus.BAD_REQUEST);
         // }
-        const hasToken = await this.tokenModel.findOneBy({ user: userId });
-        // create a token from scratch for a new user or after deleting an old token
-        if (!hasToken) {
-            const createdToken = this.tokenModel.create({
-                user: userId,
-                refreshToken,
-                ip,
-                expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+        // const hasToken = await this.tokenModel.findOneBy({ user: userId });
+        // // create a token from scratch for a new user or after deleting an old token
+        // if (!hasToken) {
+        //     const createdToken = this.tokenModel.create({
+        //         user: userId,
+        //         refreshToken,
+        //         ip,
+        //         expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+        //     });
+        //     return await this.tokenModel.save(createdToken);
+        // }
+        // hasToken.refreshToken = refreshToken;
+        
+        // const tokenData = await this.tokenModel.save(hasToken);
+        // return tokenData;
+        const domain = process.env.MAIN_DOMAIN || "paxtraining.com"
+        req.res.cookie('access_token', accessToken, {
+            maxAge: 1000 * 60 * 60 * 1,
+            httpOnly: true,
+            sameSite: 'lax',
+            domain: `.${domain}`, // Replace with your desired domain
+        });
+
+        if (refreshToken) {
+            req.res.cookie('refresh_token', refreshToken, {
+                maxAge: 1000 * 60 * 60 * 24 * 30,
+                httpOnly: true,
+                sameSite: 'lax',
+                domain: `.${domain}`, // Replace with your desired domain
             });
-            return await this.tokenModel.save(createdToken);
         }
-        hasToken.refreshToken = refreshToken;
-        const tokenData = await this.tokenModel.save(hasToken);
-        return tokenData;
+        return
     }
 
     async removeToken(refreshToken: string) {
@@ -175,31 +302,37 @@ export class AuthService {
         }
 
         const otpCode: string = this.generateOTP(6)
-        const message = `Your OTP Code: ${otpCode}`
         const now = new Date();
-        const expirationInMinute = Number(process.env.OTP_EXPIRATION) ?? 30;
-        const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
 
         const otpExists = await this.otpModel.findOneBy({email})
         if(otpExists) {
             let currentTime = new Date().getTime();
-            let diff: number = Number(otpExists.expiresIn) - currentTime;
+            let diff: number = Number(otpExists.resendIn) - currentTime;
             if(diff>0) {
                 throw new HttpException({
                     message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
+                    resendIn: otpExists.resendIn
                 }, HttpStatus.BAD_REQUEST);
             }
         }
+
+        const expirationInMinute = Number(process.env.OTP_VALID_MINUTES) || 10;
+        const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
+        const resendInMinute = Number(process.env.OTP_RESEND_MINUTES) || 2;
+        const resendIn = String(now.getTime() + (resendInMinute * 60000));
         await this.mailService.sendMailCode(email, otpCode);
         if(otpExists) {
             otpExists.code = otpCode;
             otpExists.expiresIn = expiresIn;
+            otpExists.resendIn = resendIn;
             await otpExists.save()
         } else {
             await this.otpModel.insert({
                 code: otpCode,
                 expiresIn: expiresIn,
-                email: email
+                email: email,
+                identifier: otpCode,
+                resendIn: resendIn
             })
         }
         return {
@@ -209,35 +342,51 @@ export class AuthService {
     }
 
     async verifyOtpMail(
+        req: Request,
         email: string,
         code: string,
         ip: string,
     ) {
-
-        const user = await this.userModel.findOneBy({email});
-        if(!user) {
-            throw new HttpException("Email doesn't exists", HttpStatus.BAD_REQUEST)
+        try {
+            const user = await this.userModel.findOneBy({email});
+            if(!user) {
+                throw new HttpException("Email doesn't exists", HttpStatus.BAD_REQUEST)
+            }
+            const otp = await this.otpModel.findOneBy({email})
+            if(!otp) {
+                throw new HttpException("No OTP Code associated with this email.", HttpStatus.BAD_REQUEST)
+            }
+    
+            if(otp.code!=code) {
+                throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
+            }
+    
+            let currentTime = new Date().getTime();
+            let diff: number = Number(otp.expiresIn) - currentTime;
+            if(diff<0) {
+                // code expired
+                throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
+            }
+    
+            user.isActivated = true
+            await user.save()
+            await otp.remove()
+            await this.removeLimit(email, ip)
+            return await this.tokenSession(req, user, ip)
+        } catch (error) {
+            try {
+                // Consume 1 point from limiters on wrong attempt and block if limits reached
+                await Promise.all([
+                    this.softLoginLimit.consume(this.getUsernameIPkey(email, ip)),
+                    this.hardLoginLimit.consume(ip)
+                ])
+            } catch (tlError) {
+                if(tlError?.msBeforeNext) {
+                    throw new HttpException({"message": "Too Many Requests", msBeforeNext: tlError.msBeforeNext}, 429);
+                }
+            }
+            throw error
         }
-        const otp = await this.otpModel.findOneBy({email})
-        if(!otp) {
-            throw new HttpException("Invalid Email", HttpStatus.BAD_REQUEST)
-        }
-
-        if(otp.code!=code) {
-            throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
-        }
-
-        let currentTime = new Date().getTime();
-        let diff: number = Number(otp.expiresIn) - currentTime;
-        if(diff<0) {
-            // code expired
-            throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
-        }
-
-        user.isActivated = true
-        await user.save()
-        await otp.remove()
-        return await this.tokenSession(user, ip)
     }
 
     async activateAccount(activationLink: string): Promise<any> {
@@ -261,6 +410,13 @@ export class AuthService {
         const linkReset = uuidv4();
         const forgotLink = `${process.env.CLIENT_URL}/resetpwd?link=${linkReset}`;
         await this.mailService.sendMailPasswordCreation(email, forgotLink);
+
+        const now = new Date();
+        const expirationInHours = Number(process.env.RESET_LINK_EXPIRE_HOURS) ?? 24;
+        const expirationInMinute = expirationInHours*60;
+        const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
+
+        user.resetLinkExpiresIn = expiresIn
         user.resetLink = linkReset
         await user.save()
         return;
@@ -274,6 +430,11 @@ export class AuthService {
         if (resetLink && user.resetLink !== resetLink) {
             throw new BadRequestException('Invalid Reset Link');
         }
+        let currentTime = new Date().getTime();
+        let diff: number = Number(user.resetLinkExpiresIn) - currentTime;
+        if(diff<=0) {
+            throw new BadRequestException('Reset link is expired. Please try again.');
+        }
         return;
     }
 
@@ -281,6 +442,11 @@ export class AuthService {
         const user = await this.userModel.findOneBy({resetLink});
         if (!user) {
             throw new BadRequestException('Invalid link');
+        }
+        let currentTime = new Date().getTime();
+        let diff: number = Number(user.resetLinkExpiresIn) - currentTime;
+        if(diff<=0) {
+            throw new BadRequestException('Reset link is expired. Please try again.');
         }
         var salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(password, salt);
@@ -291,6 +457,7 @@ export class AuthService {
     }
 
     async refreshToken(
+        req: Request,
         refreshtoken: string,
         ip: string,
     ) {
@@ -309,7 +476,7 @@ export class AuthService {
         if (user.banned){
             throw new UnauthorizedException({message: `User is banned.`});
         }
-        const userDataAndTokens = await this.tokenSession(user, ip);
+        const userDataAndTokens = await this.tokenSession(req, user, ip);
         return userDataAndTokens;
     }
 
@@ -378,29 +545,36 @@ export class AuthService {
         const otpCode: string = this.generateOTP(6)
         const message = `Your OTP Code: ${otpCode}`
         const now = new Date();
-        const expirationInMinute = Number(process.env.OTP_EXPIRATION) ?? 30;
-        const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
 
         const otpExists = await this.otpModel.findOneBy({phone:TARGET_PHONE_NUMBER})
         if(otpExists) {
             let currentTime = new Date().getTime();
-            let diff: number = Number(otpExists.expiresIn) - currentTime;
+            let diff: number = Number(otpExists.resendIn) - currentTime;
             if(diff>0) {
                 throw new HttpException({
                     message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
+                    resendIn: otpExists.resendIn,
                 }, HttpStatus.BAD_REQUEST);
             }
         }
         await this.phoneService.sendPhoneSMS(TARGET_PHONE_NUMBER, message);
+
+        const expirationInMinute = Number(process.env.OTP_VALID_MINUTES) || 10;
+        const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
+        const resendInMinute = Number(process.env.OTP_RESEND_MINUTES) || 2;
+        const resendIn = String(now.getTime() + (resendInMinute * 60000));
         if(otpExists) {
             otpExists.code = otpCode;
             otpExists.expiresIn = expiresIn;
+            otpExists.resendIn = resendIn
             await otpExists.save()
         } else {
             await this.otpModel.insert({
                 code: otpCode,
                 expiresIn: expiresIn,
-                phone: TARGET_PHONE_NUMBER
+                phone: TARGET_PHONE_NUMBER,
+                identifier: otpCode,
+                resendIn
             })
         }
         return {
@@ -410,35 +584,52 @@ export class AuthService {
     }
 
     async phoneVerifyService(
+        req: Request,
         TARGET_PHONE_NUMBER: string,
         code: string,
         ip: string
     ) {
-        // const result = await this.phoneService.verify(TARGET_PHONE_NUMBER, code);
-        const user = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER});
-        if(!user) {
-            throw new HttpException("Phone Number doesn't exists", HttpStatus.BAD_REQUEST)
+        try {
+            // const result = await this.phoneService.verify(TARGET_PHONE_NUMBER, code);
+            const user = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER});
+            if(!user) {
+                throw new HttpException("Phone Number doesn't exists", HttpStatus.BAD_REQUEST)
+            }
+            const otp = await this.otpModel.findOneBy({phone: TARGET_PHONE_NUMBER})
+            if(!otp) {
+                throw new HttpException("Invalid Phone Number", HttpStatus.BAD_REQUEST)
+            }
+    
+            if(otp.code!=code) {
+                throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
+            }
+    
+            let currentTime = new Date().getTime();
+            let diff: number = Number(otp.expiresIn) - currentTime;
+            if(diff<0) {
+                // code expired
+                throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
+            }
+    
+            user.phone = TARGET_PHONE_NUMBER
+            user.isActivated = true
+            await user.save()
+            await otp.remove()
+            await this.removeLimit(TARGET_PHONE_NUMBER, ip)
+            return await this.tokenSession(req, user, ip)
+        } catch (error) {
+            try {
+                // Consume 1 point from limiters on wrong attempt and block if limits reached
+                await Promise.all([
+                    this.softLoginLimit.consume(this.getUsernameIPkey(TARGET_PHONE_NUMBER, ip)),
+                    this.hardLoginLimit.consume(ip)
+                ])
+            } catch (tlError) {
+                if(tlError?.msBeforeNext) {
+                    throw new HttpException({"message": "Too Many Requests", msBeforeNext: tlError.msBeforeNext}, 429);
+                }
+            }
+            throw error;
         }
-        const otp = await this.otpModel.findOneBy({phone: TARGET_PHONE_NUMBER})
-        if(!otp) {
-            throw new HttpException("Invalid Phone Number", HttpStatus.BAD_REQUEST)
-        }
-
-        if(otp.code!=code) {
-            throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
-        }
-
-        let currentTime = new Date().getTime();
-        let diff: number = Number(otp.expiresIn) - currentTime;
-        if(diff<0) {
-            // code expired
-            throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
-        }
-
-        user.phone = TARGET_PHONE_NUMBER
-        user.isActivated = true
-        await user.save()
-        await otp.remove()
-        return await this.tokenSession(user, ip)
     }
 }

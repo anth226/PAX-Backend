@@ -6,8 +6,13 @@ import {
   OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinColumn,
+  OneToOne,
 } from 'typeorm';
 import { UserRoleEntity } from '../../roles/entity/user-role.entity';
+import { LoginAttemptEntity } from '../../auth/entity/login-attempt.entity';
+import { LoginLogEntity } from '../../auth/entity/login-logging.entity';
+import { TwoFactorMethodEntity } from '../../auth/entity/two-factor.entity';
 
 
 @Entity({
@@ -34,6 +39,9 @@ export class UserEntity extends BaseEntity {
 
   @Column({ nullable: true })
   resetLink: string;
+
+  @Column({ nullable: true })
+  resetLinkExpiresIn: string;
 
   @Column({ nullable: true })
   activationLink: string;
@@ -67,9 +75,18 @@ export class UserEntity extends BaseEntity {
 
   @Column({default:false})
   banned: boolean;
-
+  
   @Column({ default: false })
   requirePassReset: boolean;
+
+  @Column({default:false})
+  isTwoFactorAuthenticationEnabled: boolean;
+
+  @Column({default:false})
+  forcePasswordReset: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  hasAcceptedLatestTOS: boolean;
 
   @Column({ default: () => 'CURRENT_TIMESTAMP' })
   passwordChangeDateTime: Date;
@@ -82,5 +99,18 @@ export class UserEntity extends BaseEntity {
 
   @OneToMany(() => UserRoleEntity, (userRoleEntity: UserRoleEntity) => userRoleEntity.user)
   public userRoleEntity!: UserRoleEntity[];
+
+  @OneToMany(() => LoginAttemptEntity, loginAttempt => loginAttempt.user)
+  public loginAttempts: LoginAttemptEntity[];
+
+  @OneToMany(() => LoginLogEntity, log => log.user)
+  public logs: LoginLogEntity[];
+
+  @OneToMany(() => TwoFactorMethodEntity, method => method.user)
+  twoFactorMethods: TwoFactorMethodEntity[];
+
+  @OneToOne(() => TwoFactorMethodEntity)
+  @JoinColumn()
+  defaultTwoFactorMethod: TwoFactorMethodEntity;
 
 }

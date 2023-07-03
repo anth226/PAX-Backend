@@ -49,6 +49,13 @@ export class UserDto {
   isActivated: boolean;
 
   @ApiProperty({
+    description: 'Flag indicating if the user has enabled 2fa',
+    example: true,
+  })
+  @IsBoolean()
+  isTwoFactorAuthenticationEnabled: boolean;
+
+  @ApiProperty({
     description: 'The email address of the user',
     example: 'example@example.com',
   })
@@ -129,5 +136,6 @@ export class UserDto {
     this.nameLast = model.nameLast;
     this.nameSuffix = model.nameSuffix;
     this.phone = model.phone;
+    this.isTwoFactorAuthenticationEnabled = model.isTwoFactorAuthenticationEnabled;
   }  
 }

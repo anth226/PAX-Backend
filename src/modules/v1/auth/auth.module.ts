@@ -13,6 +13,12 @@ import { UserRoleEntity } from '../roles/entity/user-role.entity';
 import { RoleEntity } from '../roles/entity/role.entity';
 import { OTPEntity } from './entity/otp.entity';
 import { PhoneService } from '../phone/phone.service';
+import {PassportModule} from '@nestjs/passport'
+import { JwtAuthStrategy } from './strategies/jwt-auth.strategy';
+import { LoginAttemptEntity } from './entity/login-attempt.entity';
+import { LoggingService } from './login-logging.service';
+import { LoginLogEntity } from './entity/login-logging.entity';
+import { TwoFactorMethodEntity } from './entity/two-factor.entity';
 
 @Module({
   controllers: [AuthController],
@@ -20,7 +26,9 @@ import { PhoneService } from '../phone/phone.service';
     AuthService,
     RoleService,
     MailService,
-    PhoneService,    
+    PhoneService,
+    JwtAuthStrategy,
+    LoggingService
   ],
   imports: [
     JwtModule.register({
@@ -29,12 +37,16 @@ import { PhoneService } from '../phone/phone.service';
         expiresIn: '10m',
       },
     }),
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     TypeOrmModule.forFeature([
       RefreshTokenSessionsEntity,
       UserEntity,
       UserRoleEntity,
       RoleEntity,
       OTPEntity,
+      LoginAttemptEntity,
+      LoginLogEntity,
+      TwoFactorMethodEntity
     ]),
     RolesModule,
     forwardRef(() => UsersModule),

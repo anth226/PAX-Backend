@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { config } from 'dotenv';
 import { V1Module } from './modules/v1/v1.module';
+import { RedisModule } from '@nestjs-modules/ioredis';
 config();
 
 @Module({
@@ -16,6 +17,14 @@ config();
                 database: process.env.MYSQL_DB,
                 entities: [__dirname + '/modules/v1/**/entity/*.entity{.ts,.js}'],
                 synchronize: true,
+            }),
+        }),
+        RedisModule.forRootAsync({
+            useFactory: () => ({
+                config: { 
+                    url: process.env.REDIS_URL ?? 'redis://localhost:6379',
+                    password: process.env.REDIS_PASSWORD ?? null
+                },
             }),
         }),
         V1Module
