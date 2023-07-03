@@ -49,6 +49,20 @@ export class UserDto {
   isActivated: boolean;
 
   @ApiProperty({
+    description: 'Flag indicating if the user needs to reset the password',
+    example: true,
+  })
+  @IsBoolean()
+  requirePassReset: boolean;
+
+  @ApiProperty({
+    description: 'Flag indicating if the user has accepted latest TOS',
+    example: true,
+  })
+  @IsBoolean()
+  hasAcceptedLatestTOS: boolean;
+
+  @ApiProperty({
     description: 'Flag indicating if the user has enabled 2fa',
     example: true,
   })
@@ -137,5 +151,7 @@ export class UserDto {
     this.nameSuffix = model.nameSuffix;
     this.phone = model.phone;
     this.isTwoFactorAuthenticationEnabled = model.isTwoFactorAuthenticationEnabled;
+    this.requirePassReset = model.requirePassReset;
+    this.hasAcceptedLatestTOS = model.hasAcceptedLatestTOS;
   }  
 }

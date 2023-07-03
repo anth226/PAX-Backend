@@ -82,9 +82,6 @@ export class UserEntity extends BaseEntity {
   @Column({default:false})
   isTwoFactorAuthenticationEnabled: boolean;
 
-  @Column({default:false})
-  forcePasswordReset: boolean;
-
   @Column({ type: 'boolean', default: false })
   hasAcceptedLatestTOS: boolean;
 

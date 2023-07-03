@@ -19,6 +19,8 @@ import { TwoFactorMethodEntity } from './entity/two-factor.entity';
 import { InjectRedis, Redis } from "@nestjs-modules/ioredis";
 import { RateLimiterRedis} from "rate-limiter-flexible";
 import {Request} from 'express'
+var CryptoJS = require("crypto-js");
+
 
 const softLockoutTime = Number(process.env.SOFT_PW_LOCKOUT_MINUTES) || 5;
 const softLockoutTries = Number(process.env.SOFT_PW_LOCKOUT_TRIES) || 5;
@@ -119,6 +121,8 @@ export class AuthService {
                     message: `User with email ${userData.email} not found`,
                 }, HttpStatus.BAD_REQUEST);
             }
+            var bytes  = CryptoJS.AES.decrypt(userData.password, process.env.PASSWORD_DECRYPTION_KEY ?? "");
+            userData.password = bytes.toString(CryptoJS.enc.Utf8);
             const isPasswordEquals = await bcrypt.compare(userData.password, user.password);
             if (!isPasswordEquals) {
                 // Consume 1 point from limiters on wrong attempt and block if limits reached
@@ -303,15 +307,14 @@ export class AuthService {
 
         const otpCode: string = this.generateOTP(6)
         const now = new Date();
-
+        let currentTime = new Date().getTime();
         const otpExists = await this.otpModel.findOneBy({email})
         if(otpExists) {
-            let currentTime = new Date().getTime();
             let diff: number = Number(otpExists.resendIn) - currentTime;
             if(diff>0) {
                 throw new HttpException({
                     message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
-                    resendIn: otpExists.resendIn
+                    resendIn: Math.floor(diff/1000),
                 }, HttpStatus.BAD_REQUEST);
             }
         }
@@ -335,9 +338,10 @@ export class AuthService {
                 resendIn: resendIn
             })
         }
+        let diff: number = Number(resendIn) - currentTime;
         return {
             email:email,
-            expiresIn: expiresIn,
+            resendIn: Math.floor(diff/1000)
         }
     }
 
@@ -545,15 +549,14 @@ export class AuthService {
         const otpCode: string = this.generateOTP(6)
         const message = `Your OTP Code: ${otpCode}`
         const now = new Date();
-
+        let currentTime = new Date().getTime();
         const otpExists = await this.otpModel.findOneBy({phone:TARGET_PHONE_NUMBER})
         if(otpExists) {
-            let currentTime = new Date().getTime();
             let diff: number = Number(otpExists.resendIn) - currentTime;
             if(diff>0) {
                 throw new HttpException({
                     message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
-                    resendIn: otpExists.resendIn,
+                    resendIn: Math.floor(diff/1000),
                 }, HttpStatus.BAD_REQUEST);
             }
         }
@@ -577,9 +580,10 @@ export class AuthService {
                 resendIn
             })
         }
+        let diff: number = Number(resendIn) - currentTime;
         return {
             phone:TARGET_PHONE_NUMBER,
-            expiresIn: expiresIn,
+            resendIn: Math.floor(diff/1000)
         }
     }
 

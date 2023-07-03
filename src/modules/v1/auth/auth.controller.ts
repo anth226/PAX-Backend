@@ -47,15 +47,22 @@ export class AuthController {
   async checkEmail(
     @Req() req: Request,
     @Body() dto: AuthEmailDto,
+    @Res() res: Response,
+    @Ip() ip: any,
   ) {
     try {
+      await this.authService.limitLogin(dto.email, ip)
       const userData = await this.authService.checkEmail(dto)
       if(!userData) {
         throw new HttpException("User not found with that email.", HttpStatus.BAD_REQUEST)
       }
-      return;
+      res.status(200).json()
     } catch (error) {
-      return ErrorHandle(error) 
+      if(error?.response?.msBeforeNext) {
+        res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
+        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+      }
+      return res.status(500).json({"message": error.message, statusCode: 500});
     }
   }
 
@@ -91,12 +98,21 @@ export class AuthController {
 
   @Post('/send/otp/mail')
   @HttpCode(HttpStatus.OK)
-  async sendOtpMail(@Body() dto: OTPMailDto) {
+  async sendOtpMail(
+    @Body() dto: OTPMailDto,
+    @Res() res: Response,
+    @Ip() ip: any,
+    ) {
     try {
-      await this.authService.generateOtpMail(dto.email);
-      return;
+      await this.authService.limitLogin(dto.email, ip)
+      const response = await this.authService.generateOtpMail(dto.email);
+      res.status(200).json(response)
     } catch (error) {
-      return ErrorHandle(error)
+      if(error?.response?.msBeforeNext) {
+        res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
+        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+      }
+      return res.status(500).json({"message": error.message, statusCode: 500});
     }
   }
 
@@ -156,12 +172,21 @@ export class AuthController {
 
   @Post('/send/otp/phone')
   @HttpCode(HttpStatus.OK)
-  async phoneSendOne(@Body() dto: OTPDto) {
+  async phoneSendOne(
+    @Body() dto: OTPDto,
+    @Res() res: Response,
+    @Ip() ip: any,
+    ) {
     try {
-      await this.authService.sendOtpPhone(dto.phone);
-      return;
+      await this.authService.limitLogin(dto.phone, ip)
+      const response = await this.authService.sendOtpPhone(dto.phone);
+      res.status(200).json(response)
     } catch (error) {
-      return ErrorHandle(error)
+      if(error?.response?.msBeforeNext) {
+        res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
+        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+      }
+      return res.status(500).json({"message": error.message, statusCode: 500});
     }
   }
 
