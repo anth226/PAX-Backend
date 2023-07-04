@@ -352,6 +352,7 @@ export class AuthService {
         ip: string,
     ) {
         try {
+            code = this.decryptCryptoJS(code)
             const user = await this.userModel.findOneBy({email});
             if(!user) {
                 throw new HttpException("Email doesn't exists", HttpStatus.BAD_REQUEST)
@@ -426,6 +427,18 @@ export class AuthService {
         return;
     }
 
+    decryptCryptoJS(value) {
+        try {
+            const decryptedValue = CryptoJS.AES.decrypt(value, process.env.PASSWORD_DECRYPTION_KEY ?? "").toString(CryptoJS.enc.Utf8);
+            if(!decryptedValue) {
+              throw new BadRequestException("input is not in right format.");
+            }
+            return decryptedValue;
+        } catch(err) {
+            throw err;
+        }
+    }
+
     async checkResetPassword(resetLink: any) {
         const user = await this.userModel.findOneBy({resetLink});
         if (!user) {
@@ -442,7 +455,13 @@ export class AuthService {
         return;
     }
 
-    async newResetPassword(password: string, resetLink: string) {
+    async newResetPassword(password: string, confirm_password: string, resetLink: string) {
+        const decryptedPassword = this.decryptCryptoJS(password)
+        const decryptedConfirmPassword = this.decryptCryptoJS(confirm_password)
+        // Manually validate the password and confirm_password fields
+        if (decryptedPassword !== decryptedConfirmPassword) {
+          throw new BadRequestException('Password and Confirm Password do not match');
+        }
         const user = await this.userModel.findOneBy({resetLink});
         if (!user) {
             throw new BadRequestException('Invalid link');
@@ -453,7 +472,7 @@ export class AuthService {
             throw new BadRequestException('Reset link is expired. Please try again.');
         }
         var salt = await bcrypt.genSalt(10);
-        const hashPassword = await bcrypt.hash(password, salt);
+        const hashPassword = await bcrypt.hash(decryptedPassword, salt);
         user.password = hashPassword;
         user.resetLink = null;
         await user.save();
@@ -594,6 +613,7 @@ export class AuthService {
         ip: string
     ) {
         try {
+            code = this.decryptCryptoJS(code)
             // const result = await this.phoneService.verify(TARGET_PHONE_NUMBER, code);
             const user = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER});
             if(!user) {

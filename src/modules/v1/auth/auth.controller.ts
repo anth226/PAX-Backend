@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, HttpStatus, Ip, Post, Req, Res, Get, Headers, Redirect, Param, Put, HttpCode, UseGuards } from "@nestjs/common";
+import { Body, Controller, HttpException, HttpStatus, Ip, Post, Req, Res, Get, Headers, Redirect, Param, Put, HttpCode, UseGuards, BadRequestException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { UserEntity } from "../users/entity/user.entity";
 import { Repository } from "typeorm";
@@ -16,6 +16,7 @@ import { ChangePasswordDto } from "./entity/dto/change-password.dto";
 import { OTPDto, OTPVerifyDto, OTPMailDto } from "./entity/dto/otp.dto";
 import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import {Response} from 'express'
+var CryptoJS = require("crypto-js");
 
 @Controller('auth')
 export class AuthController {
@@ -236,7 +237,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async passwordUpdate(@Body() body: ChangePasswordDto) {
     try {
-        return this.authService.newResetPassword(body.password, body.reset_code)
+        return this.authService.newResetPassword(body.password, body.confirm_password, body.reset_code)
     } catch (error) {
         return ErrorHandle(error)
     }
