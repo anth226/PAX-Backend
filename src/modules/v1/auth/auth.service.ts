@@ -19,6 +19,7 @@ import { TwoFactorMethodEntity } from './entity/two-factor.entity';
 import { InjectRedis, Redis } from "@nestjs-modules/ioredis";
 import { RateLimiterRedis} from "rate-limiter-flexible";
 import {Request} from 'express'
+import { UpdatePasswordDto } from './entity/dto/update-password.dto';
 var CryptoJS = require("crypto-js");
 
 
@@ -104,9 +105,11 @@ export class AuthService {
             if (!user.isActivated) {
                 throw new HttpException("User is not activated.", HttpStatus.BAD_REQUEST)
             }
-            const userDataAndTokens = await this.tokenSession(req, user, ip);
-            await this.loggingService.logSuccessfulLogin(user, ip, ua, method, false)
             await this.removeLimit(user.email, ip)
+            const hasNextPage = this.checkHasNextPage(req, "password", new UserDto(user))
+            if (hasNextPage) return hasNextPage;
+            await this.loggingService.logSuccessfulLogin(user, ip, ua, method, false)
+            const userDataAndTokens = await this.tokenSession(req, user, ip);
             return userDataAndTokens;
         } catch (error) {
             throw new HttpException(error.response ?? error, error.status ?? 500)
@@ -200,7 +203,6 @@ export class AuthService {
         };
     }
 
-
     async getUserByEmail(email: string) {
         const user = await this.userModel.findOne({where: {email}, relations:['loginAttempts']});
         return user;
@@ -250,34 +252,34 @@ export class AuthService {
         };
     }
 
+    async savePreAuthToken(
+        req: Request,
+        payload: any
+    ) {
+        const token = this.jwtService.sign(payload, {
+            secret: process.env.JWT_ACCESS_SECRET,
+            expiresIn: process.env.JWT_ACCESS_EXPIRES_IN,
+        });
+        req.res.cookie('pre_auth_token', token, {
+            maxAge: 1000 * 60 * 60 * 1,
+            httpOnly: true,
+            sameSite: 'none',
+            domain: 'localhost',
+            secure: true
+        });
+    }
+
     async saveToken(
         req: Request,
         { accessToken, refreshToken }: { accessToken: string, refreshToken?: string}
     ) {
-        // if (!fingerprint) {
-        //     throw new HttpException(`Missing browser fingerprint!`, HttpStatus.BAD_REQUEST);
-        // }
-        // const hasToken = await this.tokenModel.findOneBy({ user: userId });
-        // // create a token from scratch for a new user or after deleting an old token
-        // if (!hasToken) {
-        //     const createdToken = this.tokenModel.create({
-        //         user: userId,
-        //         refreshToken,
-        //         ip,
-        //         expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
-        //     });
-        //     return await this.tokenModel.save(createdToken);
-        // }
-        // hasToken.refreshToken = refreshToken;
-        
-        // const tokenData = await this.tokenModel.save(hasToken);
-        // return tokenData;
         const domain = process.env.MAIN_DOMAIN || "paxtraining.com"
         req.res.cookie('access_token', accessToken, {
             maxAge: 1000 * 60 * 60 * 1,
             httpOnly: true,
             sameSite: 'lax',
             domain: `.${domain}`, // Replace with your desired domain
+            secure: true
         });
 
         if (refreshToken) {
@@ -286,6 +288,7 @@ export class AuthService {
                 httpOnly: true,
                 sameSite: 'lax',
                 domain: `.${domain}`, // Replace with your desired domain
+                secure: true
             });
         }
         return
@@ -350,6 +353,8 @@ export class AuthService {
         email: string,
         code: string,
         ip: string,
+        ua: string,
+        method: string,
     ) {
         try {
             code = this.decryptCryptoJS(code)
@@ -372,11 +377,13 @@ export class AuthService {
                 // code expired
                 throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
             }
-    
             user.isActivated = true
             await user.save()
             await otp.remove()
-            await this.removeLimit(email, ip)
+            this.removeLimit(email, ip)
+            const hasNextPage = this.checkHasNextPage(req, "2fa", new UserDto(user))
+            if (hasNextPage) return hasNextPage;
+            await this.loggingService.logSuccessfulLogin(user, ip, ua, method, true)
             return await this.tokenSession(req, user, ip)
         } catch (error) {
             try {
@@ -392,6 +399,68 @@ export class AuthService {
             }
             throw error
         }
+    }
+
+    async requirePassReset(
+        req: Request,
+        userDto: any,
+        body: UpdatePasswordDto,
+        ip: string,
+        ua: string,
+        method: string,
+    ) {
+        this.updatePassword(userDto?.email, body.current_password, body.new_password, ip)
+        const hasNextPage = this.checkHasNextPage(req, "password-reset", userDto)
+        if (hasNextPage) return hasNextPage;
+        const user = await this.userModel.findOneBy({id:userDto.id})
+        await this.loggingService.logSuccessfulLogin(user, ip, ua, method, false)
+        const userDataAndTokens = await this.tokenSession(req, user, ip);
+        return userDataAndTokens;
+    }
+
+    async updatePassword(
+        email: string,
+        current_password: string,
+        new_password: string,
+        ip: string
+    ) {
+        const userData = {email, password: current_password}
+        const user = await this.validateUser(userData, ip)
+        if (user.banned) {
+            throw new UnauthorizedException({
+                message: `You are banned`,
+            });
+        }
+        if (!user.isActivated) {
+            throw new HttpException("User is not activated.", HttpStatus.BAD_REQUEST)
+        }
+        var salt = await bcrypt.genSalt(10);
+        const hashPassword = await bcrypt.hash(new_password, salt);
+        return await this.userModel.update({id: user.id}, {password: hashPassword})
+    }
+
+    async checkHasNextPage(req: Request, currentPage: string, user: UserDto) {
+        let nextPage: string | null = null;
+        if(currentPage=="password" && user?.isTwoFactorAuthenticationEnabled) {
+            nextPage = "2fa";
+        } else if(currentPage!="password-reset" && user?.requirePassReset) {
+            const payload = {id:user.id, email:user.email}
+            this.savePreAuthToken(req, payload)
+            nextPage = "password-reset";
+        } else if(!user?.hasAcceptedLatestTOS) {
+            const payload = {id:user.id, email:user.email}
+            this.savePreAuthToken(req, payload)
+            nextPage = "agreement";
+        }
+        if(nextPage) {
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'User information',
+                user: user,
+                nextPage
+            };
+        }
+        return null;
     }
 
     async activateAccount(activationLink: string): Promise<any> {
@@ -427,7 +496,7 @@ export class AuthService {
         return;
     }
 
-    decryptCryptoJS(value) {
+    decryptCryptoJS(value: string) {
         try {
             const decryptedValue = CryptoJS.AES.decrypt(value, process.env.PASSWORD_DECRYPTION_KEY ?? "").toString(CryptoJS.enc.Utf8);
             if(!decryptedValue) {
@@ -566,7 +635,9 @@ export class AuthService {
         }
 
         const otpCode: string = this.generateOTP(6)
-        const message = `Your OTP Code: ${otpCode}`
+
+        const message = `Your PAX Training Code is: ${otpCode} \n\nDon't share it with anyone. \n\n@${process.env.MAIN_DOMAIN} https://${process.env.MAIN_DOMAIN}`
+
         const now = new Date();
         let currentTime = new Date().getTime();
         const otpExists = await this.otpModel.findOneBy({phone:TARGET_PHONE_NUMBER})
@@ -610,7 +681,9 @@ export class AuthService {
         req: Request,
         TARGET_PHONE_NUMBER: string,
         code: string,
-        ip: string
+        ip: string,
+        ua: string,
+        method: string
     ) {
         try {
             code = this.decryptCryptoJS(code)
@@ -634,12 +707,14 @@ export class AuthService {
                 // code expired
                 throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
             }
-    
             user.phone = TARGET_PHONE_NUMBER
             user.isActivated = true
             await user.save()
             await otp.remove()
-            await this.removeLimit(TARGET_PHONE_NUMBER, ip)
+            await this.removeLimit(TARGET_PHONE_NUMBER, ip);
+            const hasNextPage = this.checkHasNextPage(req, "2fa", new UserDto(user))
+            if (hasNextPage) return hasNextPage;
+            await this.loggingService.logSuccessfulLogin(user, ip, ua, method, true)
             return await this.tokenSession(req, user, ip)
         } catch (error) {
             try {

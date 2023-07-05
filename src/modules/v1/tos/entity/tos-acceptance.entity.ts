@@ -1,21 +1,22 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { TOSTextEntity } from './tos.entity';
+import { UserEntity } from '../../users/entity/user.entity';
 
 @Entity({
     name: "tos-acceptance"
 })
 export class TOSAcceptanceEntity {
   @PrimaryGeneratedColumn()
-  ID: number;
+  id: number;
 
-  @Column({ type: 'bigint' })
-  UserID: number;
+  @ManyToOne(() => UserEntity)
+  user: UserEntity;
 
   @ManyToOne(() => TOSTextEntity)
-  TOSText: TOSTextEntity;
+  tosText: TOSTextEntity;
 
   @Column({ default: () => 'CURRENT_TIMESTAMP' })
-  AcceptanceDateTime: Date;
+  acceptanceDateTime: Date;
 
   @Column({ default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;

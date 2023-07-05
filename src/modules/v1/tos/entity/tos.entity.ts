@@ -5,7 +5,7 @@ import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
 })
 export class TOSTextEntity {
   @PrimaryGeneratedColumn()
-  ID: number;
+  id: number;
 
   @Column({ type: 'text' })
   text: string;

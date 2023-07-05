@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import {ValidationPipe} from '@nestjs/common'
+import * as cookieParser from 'cookie-parser'
 
 async function bootstrap() {
   try {
@@ -13,6 +14,7 @@ async function bootstrap() {
         origin: process.env.CLIENT_URL,
       },
     });
+    app.use(cookieParser())
     app.setGlobalPrefix('v1');
     app.useGlobalPipes(new ValidationPipe());
     const config = new DocumentBuilder()

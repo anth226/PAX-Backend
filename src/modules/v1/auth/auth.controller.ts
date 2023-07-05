@@ -16,6 +16,8 @@ import { ChangePasswordDto } from "./entity/dto/change-password.dto";
 import { OTPDto, OTPVerifyDto, OTPMailDto } from "./entity/dto/otp.dto";
 import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import {Response} from 'express'
+import { UpdatePasswordDto } from "./entity/dto/update-password.dto";
+import { PreAuthGuard } from "src/guards/pre-auth.guard";
 var CryptoJS = require("crypto-js");
 
 @Controller('auth')
@@ -123,15 +125,20 @@ export class AuthController {
     @Body() dto: VerifyMailDto,
     @Req() req: Request,
     @Ip() ip: any,
-    @Res() res: Response
+    @Res() res: Response,
+    @Headers() headers: Record<string, string>
     ) {
     try {
       await this.authService.limitLogin(dto.email, ip)
+      const ua = headers['user-agent'];
+      const method = req.method
       const userData = await this.authService.verifyOtpMail(
         req,
         dto.email,
         dto.code,
         ip,
+        ua,
+        method
       );
       return res.status(200).json(userData)
     } catch (error) {
@@ -197,11 +204,14 @@ export class AuthController {
     @Req() req: Request,
     @Body() dto: OTPVerifyDto,
     @Ip() ip: any,
-    @Res() res: Response
+    @Res() res: Response,
+    @Headers() headers: Record <string, string>
     ) {
     try {
       await this.authService.limitLogin(dto.phone, ip)
-      const userData = await this.authService.phoneVerifyService(req, dto.phone, dto.code, ip);
+      const ua = headers['user-agent'];
+      const method = req.method
+      const userData = await this.authService.phoneVerifyService(req, dto.phone, dto.code, ip, ua, method);
       res.status(200).json(userData)
     } catch (error) {
       if(error?.response?.msBeforeNext) {
@@ -232,7 +242,26 @@ export class AuthController {
     }
   }
 
-  // TODO: Still Need to make it
+  @Post('/require/password-reset')
+  @UseGuards(PreAuthGuard)
+  @ApiResponse({status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
+  async requirePassReset(
+    @Req() req: Request,
+    @Body() dto: UpdatePasswordDto,
+    @Ip() ip: any,
+    @Headers() headers: Record <string, string>
+    ) {
+      try {
+        const ua = headers['user-agent'];
+        const method = req.method
+        return this.authService.requirePassReset(req, req.user, dto, ip, ua, method);
+      } catch (error) {
+        return ErrorHandle(error)
+      }
+    }
+
+
+
   @Put('/password')
   @HttpCode(HttpStatus.OK)
   async passwordUpdate(@Body() body: ChangePasswordDto) {
