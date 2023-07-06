@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { config } from 'dotenv';
 import { V1Module } from './modules/v1/v1.module';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { I18nModule, QueryResolver } from 'nestjs-i18n';
+import * as path from 'path';
 config();
 
 @Module({
@@ -26,6 +28,19 @@ config();
                     password: process.env.REDIS_PASSWORD ?? null
                 },
             }),
+        }),
+        I18nModule.forRootAsync({
+            useFactory: () => ({
+                fallbackLanguage: "en",
+                loaderOptions: {
+                    path: path.join(__dirname, "/locales/"),
+                    watch: true,
+                },
+                typesOutputPath: path.join(__dirname, '../src/generated/i18n.generated.ts'),
+            }),
+            resolvers: [
+                new QueryResolver(["lang", "l"]),
+            ],
         }),
         V1Module
     ],

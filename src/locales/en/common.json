@@ -1,0 +1,36 @@
+{
+    "auth": {
+        "invalid_phone": "Phone Number is invalid.",
+        "email_exists": "email already exists.",
+        "invalid_user": "User not found with that email.",
+        "invalid_email": "User with email {email} not found",
+        "too_many_requests": "Too Many Requests",
+        "banned": "You are banned",
+        "inactive": "User is not activated.",
+        "incorrect_password": "Incorrect Password",
+        "invalid_id": "The user with the given ID is not in the database",
+        "user_information": "User information",
+        "already_otp": "You've already generated OTP Code. Please try again afte {time}",
+        "no_otp": "No OTP Code found for {email}",
+        "invalid_otp": "Invalid OTP Code",
+        "otp_expired": "OTP Code Expired",
+        "invalid_activation_link": "Invalid activation link",
+        "invalid_format": "{value} is not in right format.",
+        "invalid_reset_link": "Invalid Reset Link",
+        "reset_link_expired": "Reset link is expired. Please try again.",
+        "not_matched": "{value1} and {value2} does not match",
+        "invalid_link": "Invalid link",
+        "otp_message": "Your {appName} Code is: {otpCode} \n\nDon't share it with anyone. \n\n@{domain} {url}"
+    },
+    "mail": {
+        "otp_verification": {
+            "subject": "OTP Verification Email - {companyName}"
+        },
+        "reset_password": {
+            "subject": "Reset Password - {companyName}"
+        }
+    },
+    "tos": {
+        "no_tos": "No Terms or Service found in the database."
+    }
+}

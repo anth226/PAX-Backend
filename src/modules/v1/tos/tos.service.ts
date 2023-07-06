@@ -8,6 +8,8 @@ import { UserEntity } from '../users/entity/user.entity';
 import { TOSAcceptanceEntity } from './entity/tos-acceptance.entity';
 import { LoggingService } from '../auth/login-logging.service';
 import { AuthService } from '../auth/auth.service';
+import { I18nTranslations } from 'src/generated/i18n.generated';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class TOSTextService {
@@ -17,6 +19,7 @@ export class TOSTextService {
     @InjectRepository(TOSAcceptanceEntity) private readonly tosAcceptanceModel: Repository<TOSAcceptanceEntity>,
     private readonly authService: AuthService,
     private readonly loggingService: LoggingService,
+    private readonly i18n: I18nService <I18nTranslations>
   ) {}
 
   async createTOSText(createTOSTextDto: TOSTextDto): Promise<TOSTextEntity> {
@@ -32,13 +35,13 @@ export class TOSTextService {
     const user = await this.userModel.findOneBy({id:  req.user?.id})
     if(!user) {
         throw new BadRequestException({
-            message: 'The user with the given ID is not in the database',
+            message: this.i18n.translate('common.auth.invalid_id'),
         });
     }
     const tosText = await this.tosTextModel.findOne({where:{}, order: {createdAt: 'DESC'}})
     if(!tosText) {
       throw new BadRequestException({
-            message: 'No TOS entry found in the database.',
+            message: this.i18n.translate('common.tos.no_tos'),
       });
     }
     await this.tosAcceptanceModel.insert({
@@ -49,5 +52,4 @@ export class TOSTextService {
     const userDataAndTokens = await this.authService.tokenSession(req, user, ip);
     return userDataAndTokens;
   }
-
 }

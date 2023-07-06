@@ -2,6 +2,9 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "assets": ["/**/*.png"]
+    "assets": [
+      "/**/*.png",
+      { "include": "locales/**/*", "watchAssets": true }
+    ]
   }
 }

@@ -1,10 +1,15 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import * as path from 'path';
+import { I18nTranslations } from 'src/generated/i18n.generated';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class MailService {
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(
+    private readonly mailerService: MailerService,
+    private readonly i18n: I18nService <I18nTranslations>
+  ) {}
   async sendActivationMail(toEmail: string, link: string, generatedPassword?: any): Promise<void> {
     try {
       this.mailerService.sendMail({
@@ -35,7 +40,7 @@ export class MailService {
       this.mailerService.sendMail({
         to: toEmail, // list of receivers
         from: process.env.AWS_SENDER_EMAIL, // sender address
-        subject: `OTP Verification Email - ${process.env.COMPANY_NAME}`, // Subject of the email
+        subject: this.i18n.translate('common.mail.otp_verification.subject', {args: {companyName: process.env.COMPANY_NAME}}),
         text: '', // plaintext body
         html: `
 <html lang="en">
@@ -149,7 +154,7 @@ export class MailService {
       await this.mailerService.sendMail({
         to: toEmail,
         from: process.env.AWS_SENDER_EMAIL,
-        subject: `Reset Password - ${process.env.COMPANY_NAME} ✔`,
+        subject: this.i18n.translate('common.mail.reset_password.subject', {args: {companyName: process.env.COMPANY_NAME}}),
         text: '',
         html: `
 <html lang="en">

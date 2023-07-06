@@ -22,6 +22,8 @@ import {Request} from 'express'
 import { UpdatePasswordDto } from './entity/dto/update-password.dto';
 var CryptoJS = require("crypto-js");
 import parsePhoneNumber from 'libphonenumber-js'
+import { I18nService } from 'nestjs-i18n';
+import { I18nTranslations } from 'src/generated/i18n.generated';
 
 
 const softLockoutTime = Number(process.env.SOFT_PW_LOCKOUT_MINUTES) || 5;
@@ -49,6 +51,7 @@ export class AuthService {
     // private readonly client: TwilioClient,
     private connection: Connection, // TypeORM transactions.
     private readonly loggingService: LoggingService,
+    private readonly i18n: I18nService <I18nTranslations>,
     @InjectRedis() private readonly redis: Redis
   ) {
     this.softLoginLimit = new RateLimiterRedis({
@@ -70,11 +73,11 @@ export class AuthService {
     async register(userData:CreateUserDto) {
         const isNumberValid = this.isPhoneNumberValid(userData.phone)
         if(!isNumberValid) {
-            throw new BadRequestException('Phone Number is not valid.');
+            throw new BadRequestException(this.i18n.translate('common.auth.invalid_phone'));
         }
         const user = await this.userModel.findOneBy({email: userData.email});
         if (user) {
-            throw new BadRequestException('email already exists.');
+            throw new BadRequestException(this.i18n.translate('common.auth.email_exists'));
         }
         var salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(userData.password, salt);
@@ -104,11 +107,11 @@ export class AuthService {
             const user: UserEntity = await this.validateUser(userData, ip);
             if (user.banned) {
                 throw new UnauthorizedException({
-                    message: `You are banned`,
+                    message: this.i18n.translate('common.auth.banned'),
                 });
             }
             if (!user.isActivated) {
-                throw new HttpException("User is not activated.", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.inactive'), HttpStatus.BAD_REQUEST)
             }
             await this.removeLimit(user.email, ip)
             const hasNextPage = this.checkHasNextPage(req, "password", new UserDto(user))
@@ -126,7 +129,7 @@ export class AuthService {
             const user = await this.getUserByEmail(userData.email);
             if (!user) {
                 throw new HttpException({
-                    message: `User with email ${userData.email} not found`,
+                    message: this.i18n.translate('common.auth.invalid_email', {args: {email: userData.email}}),
                 }, HttpStatus.BAD_REQUEST);
             }
             var bytes  = CryptoJS.AES.decrypt(userData.password, process.env.PASSWORD_DECRYPTION_KEY ?? "");
@@ -138,13 +141,13 @@ export class AuthService {
                   this.softLoginLimit.consume(this.getUsernameIPkey(user.email, ip)),
                   this.hardLoginLimit.consume(ip)
                 ])
-                throw new HttpException({ message: `Incorrect Password`, isPasswordFailed: true }, HttpStatus.BAD_REQUEST);
+                throw new HttpException({ message: this.i18n.translate('common.auth.incorrect_password'), isPasswordFailed: true }, HttpStatus.BAD_REQUEST);
             }
             const { password, ...result } = user;
             return result;
         } catch (error) {
             if(error?.msBeforeNext) {
-                throw new HttpException({"message": "Too Many Requests", msBeforeNext: error.msBeforeNext}, 429);
+                throw new HttpException({"message": this.i18n.translate("common.auth.too_many_requests"), msBeforeNext: error.msBeforeNext}, 429);
             }
             throw error;
         }
@@ -154,7 +157,7 @@ export class AuthService {
         const user = await this.userModel.findOneBy({id: userId})
         if(!user) {
             throw new UnauthorizedException({
-                message: 'The user with the given ID is not in the database',
+                message: this.i18n.translate("common.auth.invalid_id"),
             });
         }
         user.isTwoFactorAuthenticationEnabled = true;
@@ -166,7 +169,7 @@ export class AuthService {
         const user = await this.userModel.findOne({where: {id: userId}, relations:["twoFactorMethods"]})
         if(!user) {
             throw new UnauthorizedException({
-                message: 'The user with the given ID is not in the database',
+                message: this.i18n.translate("common.auth.invalid_id"),
             });
         }
         let method = user.twoFactorMethods.find(method => method.methodType === methodType);
@@ -188,7 +191,7 @@ export class AuthService {
     async tokenSession(req: Request, userData: any, ip: string) {
         if (!userData) {
             throw new UnauthorizedException({
-                message: 'The user with the given ID is not in the database',
+                message: this.i18n.translate("common.auth.invalid_id"),
             });
         }
         // pulling out roles for results
@@ -201,7 +204,7 @@ export class AuthService {
         await this.saveToken(req, {accessToken: tokens.accessToken, refreshToken:tokens.refreshToken});
         return {
             statusCode: HttpStatus.OK,
-            message: 'User information',
+            message: this.i18n.translate('common.auth.user_information'),
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken, // refresh token only for mobile app
             user: userDto,
@@ -209,7 +212,7 @@ export class AuthService {
     }
 
     async getUserByEmail(email: string) {
-        const user = await this.userModel.findOne({where: {email}, relations:['loginAttempts']});
+        const user = await this.userModel.findOne({where: {email}});
         return user;
     }
 
@@ -220,10 +223,10 @@ export class AuthService {
             this.hardLoginLimit.get(ip)
         ]);
         if(softLimitResponse && softLimitResponse.consumedPoints>softLockoutTries) {
-            throw new HttpException({"message": "Too Many Requests", msBeforeNext: softLimitResponse.msBeforeNext}, 429);
+            throw new HttpException({"message": this.i18n.translate("common.auth.too_many_requests"), msBeforeNext: softLimitResponse.msBeforeNext}, 429);
         }
         if(hardLimitResponse && hardLimitResponse.consumedPoints>hardLockoutTries) {
-            throw new HttpException({"message": "Too Many Requests", msBeforeNext: hardLimitResponse.msBeforeNext}, 429);
+            throw new HttpException({"message": this.i18n.translate("common.auth.too_many_requests"), msBeforeNext: hardLimitResponse.msBeforeNext}, 429);
         }
         return;
     }
@@ -261,6 +264,7 @@ export class AuthService {
         req: Request,
         payload: any
     ) {
+        const domain = process.env.MAIN_DOMAIN || "paxtraining.com"
         const token = this.jwtService.sign(payload, {
             secret: process.env.JWT_ACCESS_SECRET,
             expiresIn: process.env.JWT_ACCESS_EXPIRES_IN,
@@ -269,7 +273,7 @@ export class AuthService {
             maxAge: 1000 * 60 * 60 * 1,
             httpOnly: true,
             sameSite: 'none',
-            domain: 'localhost',
+            domain: `${domain}`,
             secure: true
         });
     }
@@ -309,7 +313,7 @@ export class AuthService {
         const user = await this.userModel.findOneBy({email})
         if(!user) {
             throw new HttpException({
-                message: `Invalid Email`,
+                message: this.i18n.translate("common.auth.invalid_email", {args: {email}}),
             }, HttpStatus.BAD_REQUEST);
         }
 
@@ -321,7 +325,7 @@ export class AuthService {
             let diff: number = Number(otpExists.resendIn) - currentTime;
             if(diff>0) {
                 throw new HttpException({
-                    message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
+                    message: this.i18n.translate('common.auth.already_otp', {args: {time:this.formatTimeDuration(diff)}}),
                     resendIn: Math.floor(diff/1000),
                 }, HttpStatus.BAD_REQUEST);
             }
@@ -365,22 +369,22 @@ export class AuthService {
             code = this.decryptCryptoJS(code)
             const user = await this.userModel.findOneBy({email});
             if(!user) {
-                throw new HttpException("Email doesn't exists", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate("common.auth.invalid_email", {args: {email}}), HttpStatus.BAD_REQUEST)
             }
             const otp = await this.otpModel.findOneBy({email})
             if(!otp) {
-                throw new HttpException("No OTP Code associated with this email.", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.no_otp', {args:{email}}), HttpStatus.BAD_REQUEST)
             }
     
             if(otp.code!=code) {
-                throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.invalid_otp'), HttpStatus.BAD_REQUEST)
             }
     
             let currentTime = new Date().getTime();
             let diff: number = Number(otp.expiresIn) - currentTime;
             if(diff<0) {
                 // code expired
-                throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.otp_expired'), HttpStatus.BAD_REQUEST)
             }
             user.isActivated = true
             await user.save()
@@ -399,7 +403,7 @@ export class AuthService {
                 ])
             } catch (tlError) {
                 if(tlError?.msBeforeNext) {
-                    throw new HttpException({"message": "Too Many Requests", msBeforeNext: tlError.msBeforeNext}, 429);
+                    throw new HttpException({"message": this.i18n.translate("common.auth.too_many_requests"), msBeforeNext: tlError.msBeforeNext}, 429);
                 }
             }
             throw error
@@ -433,11 +437,11 @@ export class AuthService {
         const user = await this.validateUser(userData, ip)
         if (user.banned) {
             throw new UnauthorizedException({
-                message: `You are banned`,
+                message: this.i18n.translate('common.auth.banned'),
             });
         }
         if (!user.isActivated) {
-            throw new HttpException("User is not activated.", HttpStatus.BAD_REQUEST)
+            throw new HttpException(this.i18n.translate('common.auth.inactive'), HttpStatus.BAD_REQUEST)
         }
         var salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(new_password, salt);
@@ -466,7 +470,7 @@ export class AuthService {
         if(nextPage) {
             return {
                 statusCode: HttpStatus.OK,
-                message: 'User information',
+                message: this.i18n.translate('common.auth.user_information'),
                 user: user,
                 nextPage
             };
@@ -477,7 +481,7 @@ export class AuthService {
     async activateAccount(activationLink: string): Promise<any> {
         const user = await this.userModel.findOneBy({ activationLink });
         if (!user) {
-            throw new HttpException(`Invalid activation link`, HttpStatus.BAD_REQUEST);
+            throw new HttpException(this.i18n.translate('common.auth.invalid_activation_link'), HttpStatus.BAD_REQUEST);
         }
         user.isActivated = true;
         await user.save();
@@ -487,20 +491,18 @@ export class AuthService {
     async resetPassword(email: any) {
         const user = await this.getUserByEmail(email);
         if (!user) {
-            throw new HttpException('Email not found in our database.', HttpStatus.BAD_REQUEST);
+            throw new HttpException(this.i18n.translate('common.auth.invalid_email', {args:{email}}), HttpStatus.BAD_REQUEST);
         }
         if (!user.isActivated) {
-            throw new MethodNotAllowedException();
+            throw new HttpException(this.i18n.translate('common.auth.inactive'), HttpStatus.BAD_REQUEST)
         }
         const linkReset = uuidv4();
         const forgotLink = `${process.env.CLIENT_URL}/resetpwd?link=${linkReset}`;
         await this.mailService.sendMailPasswordCreation(email, forgotLink);
-
         const now = new Date();
         const expirationInHours = Number(process.env.RESET_LINK_EXPIRE_HOURS) ?? 24;
         const expirationInMinute = expirationInHours*60;
         const expiresIn = String(now.getTime() + (expirationInMinute * 60000));
-
         user.resetLinkExpiresIn = expiresIn
         user.resetLink = linkReset
         await user.save()
@@ -511,7 +513,7 @@ export class AuthService {
         try {
             const decryptedValue = CryptoJS.AES.decrypt(value, process.env.PASSWORD_DECRYPTION_KEY ?? "").toString(CryptoJS.enc.Utf8);
             if(!decryptedValue) {
-              throw new BadRequestException("input is not in right format.");
+              throw new BadRequestException(this.i18n.translate("common.auth.invalid_format", {args: {value}}));
             }
             return decryptedValue;
         } catch(err) {
@@ -522,15 +524,15 @@ export class AuthService {
     async checkResetPassword(resetLink: any) {
         const user = await this.userModel.findOneBy({resetLink});
         if (!user) {
-            throw new BadRequestException('Invalid Reset Link');
+            throw new BadRequestException(this.i18n.translate('common.auth.invalid_reset_link'));
         }
         if (resetLink && user.resetLink !== resetLink) {
-            throw new BadRequestException('Invalid Reset Link');
+            throw new BadRequestException(this.i18n.translate('common.auth.invalid_reset_link'));
         }
         let currentTime = new Date().getTime();
         let diff: number = Number(user.resetLinkExpiresIn) - currentTime;
         if(diff<=0) {
-            throw new BadRequestException('Reset link is expired. Please try again.');
+            throw new BadRequestException(this.i18n.translate('common.auth.reset_link_expired'));
         }
         return;
     }
@@ -540,16 +542,16 @@ export class AuthService {
         const decryptedConfirmPassword = this.decryptCryptoJS(confirm_password)
         // Manually validate the password and confirm_password fields
         if (decryptedPassword !== decryptedConfirmPassword) {
-          throw new BadRequestException('Password and Confirm Password do not match');
+          throw new BadRequestException(this.i18n.translate('common.auth.not_matched', {args: {value1: "Password", value2: "Confirm Password"}}));
         }
         const user = await this.userModel.findOneBy({resetLink});
         if (!user) {
-            throw new BadRequestException('Invalid link');
+            throw new BadRequestException(this.i18n.translate('common.auth.invalid_link'));
         }
         let currentTime = new Date().getTime();
         let diff: number = Number(user.resetLinkExpiresIn) - currentTime;
         if(diff<=0) {
-            throw new BadRequestException('Reset link is expired. Please try again.');
+            throw new BadRequestException(this.i18n.translate('common.auth.reset_link_expired'));
         }
         var salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(decryptedPassword, salt);
@@ -559,69 +561,67 @@ export class AuthService {
         return;
     }
 
-    async refreshToken(
-        req: Request,
-        refreshtoken: string,
-        ip: string,
-    ) {
-        if (!refreshtoken) {
-            throw new UnauthorizedException({ message: 'User not authorized' });
-        }
-        const userData = this.validateRefreshToken(refreshtoken);
-        const tokenDb = await this.findToken(refreshtoken);
-        if (!tokenDb) {
-            throw new UnauthorizedException({
-                message:
-                'refreshToken service: refresh token not found.',
-            });
-        }
-        const user = await this.userModel.findOne(userData.id);
-        if (user.banned){
-            throw new UnauthorizedException({message: `User is banned.`});
-        }
-        const userDataAndTokens = await this.tokenSession(req, user, ip);
-        return userDataAndTokens;
-    }
+    // async refreshToken(
+    //     req: Request,
+    //     refreshtoken: string,
+    //     ip: string,
+    // ) {
+    //     if (!refreshtoken) {
+    //         throw new UnauthorizedException({ message: 'User not authorized' });
+    //     }
+    //     const userData = this.validateRefreshToken(refreshtoken);
+    //     const tokenDb = await this.findToken(refreshtoken);
+    //     if (!tokenDb) {
+    //         throw new UnauthorizedException({
+    //             message:
+    //             'refreshToken service: refresh token not found.',
+    //         });
+    //     }
+    //     const user = await this.userModel.findOne(userData.id);
+    //     if (user.banned){
+    //         throw new UnauthorizedException({message: `User is banned.`});
+    //     }
+    //     const userDataAndTokens = await this.tokenSession(req, user, ip);
+    //     return userDataAndTokens;
+    // }
 
-    private validateRefreshToken(token: string) {
-        try {
-            const userData = this.jwtService.verify(token, {
-                secret: process.env.JWT_REFRESH_SECRET,
-            });
-            return userData;
-        } catch (error) {
-            if (error instanceof jwt.TokenExpiredError) {
-                this.removeToken(token);
-                throw new HttpException(`Refresh token has expired`, HttpStatus.BAD_REQUEST);
-            }
-            if (error instanceof jwt.JsonWebTokenError) {
-                throw new HttpException(`Invalid refresh token format`, HttpStatus.BAD_REQUEST);
-            }
-            throw new HttpException(`Server Error`, HttpStatus.BAD_REQUEST);
-        }
-    }
+    // private validateRefreshToken(token: string) {
+    //     try {
+    //         const userData = this.jwtService.verify(token, {
+    //             secret: process.env.JWT_REFRESH_SECRET,
+    //         });
+    //         return userData;
+    //     } catch (error) {
+    //         if (error instanceof jwt.TokenExpiredError) {
+    //             this.removeToken(token);
+    //             throw new HttpException(`Refresh token has expired`, HttpStatus.BAD_REQUEST);
+    //         }
+    //         if (error instanceof jwt.JsonWebTokenError) {
+    //             throw new HttpException(`Invalid refresh token format`, HttpStatus.BAD_REQUEST);
+    //         }
+    //         throw new HttpException(`Server Error`, HttpStatus.BAD_REQUEST);
+    //     }
+    // }
 
-    private async findToken(refreshToken: string) {
-        try {
-            const tokenData = await this.tokenModel.findOneBy({ refreshToken });
-            return tokenData;
-        } catch (error) {
-            throw new UnauthorizedException({
-                message: 'findToken service: Refresh token not found',
-            });
-        }
-    }
+    // private async findToken(refreshToken: string) {
+    //     try {
+    //         const tokenData = await this.tokenModel.findOneBy({ refreshToken });
+    //         return tokenData;
+    //     } catch (error) {
+    //         throw new UnauthorizedException({
+    //             message: 'findToken service: Refresh token not found',
+    //         });
+    //     }
+    // }
 
     private generateOTP(length=4) {
         const chars = '0123456789';
         const charsLength = chars.length;
         let otp = '';
-
         for (let i = 0; i < length; i++) {
             const randomIndex = Math.floor(Math.random() * charsLength);
             otp += chars[randomIndex];
         }
-
         return otp;
     }
 
@@ -640,22 +640,23 @@ export class AuthService {
         return parsePhoneNumber(phone);
     }
 
-    async testSend(target, message="hello") {
-        return target;
-    }
-
-
     async sendOtpPhone(TARGET_PHONE_NUMBER: string) {
         const user = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER})
         if(!user) {
             throw new HttpException({
-                message: `Invalid Email`,
+                message: this.i18n.translate('common.auth.invalid_phone'),
             }, HttpStatus.BAD_REQUEST);
         }
 
         const otpCode: string = this.generateOTP(6)
-
-        const message = `Your PAX Training Code is: ${otpCode} \n\nDon't share it with anyone. \n\n@${process.env.MAIN_DOMAIN} https://${process.env.MAIN_DOMAIN}`
+        const message = this.i18n.translate('common.auth.otp_message', {
+            args: {
+                appName: process.env.COMPANY_NAME,
+                otpCode,
+                domain: process.env.MAIN_DOMAIN,
+                url: `https://${process.env.MAIN_DOMAIN}`
+            }
+        })
 
         const now = new Date();
         let currentTime = new Date().getTime();
@@ -664,7 +665,7 @@ export class AuthService {
             let diff: number = Number(otpExists.resendIn) - currentTime;
             if(diff>0) {
                 throw new HttpException({
-                    message: `You've already generated OTP Code. Please try again afte ${this.formatTimeDuration(diff)}`,
+                    message: this.i18n.translate('common.auth.already_otp', {args: {time: this.formatTimeDuration(diff)}}),
                     resendIn: Math.floor(diff/1000),
                 }, HttpStatus.BAD_REQUEST);
             }
@@ -709,22 +710,22 @@ export class AuthService {
             // const result = await this.phoneService.verify(TARGET_PHONE_NUMBER, code);
             const user = await this.userModel.findOneBy({phone:TARGET_PHONE_NUMBER});
             if(!user) {
-                throw new HttpException("Phone Number doesn't exists", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.invalid_phone'), HttpStatus.BAD_REQUEST)
             }
             const otp = await this.otpModel.findOneBy({phone: TARGET_PHONE_NUMBER})
             if(!otp) {
-                throw new HttpException("Invalid Phone Number", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.invalid_phone'), HttpStatus.BAD_REQUEST)
             }
     
             if(otp.code!=code) {
-                throw new HttpException("Invalid OTP Code", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.invalid_otp'), HttpStatus.BAD_REQUEST)
             }
     
             let currentTime = new Date().getTime();
             let diff: number = Number(otp.expiresIn) - currentTime;
             if(diff<0) {
                 // code expired
-                throw new HttpException("OTP Code Expired", HttpStatus.BAD_REQUEST)
+                throw new HttpException(this.i18n.translate('common.auth.otp_expired'), HttpStatus.BAD_REQUEST)
             }
             user.phone = TARGET_PHONE_NUMBER
             user.isActivated = true
@@ -744,7 +745,7 @@ export class AuthService {
                 ])
             } catch (tlError) {
                 if(tlError?.msBeforeNext) {
-                    throw new HttpException({"message": "Too Many Requests", msBeforeNext: tlError.msBeforeNext}, 429);
+                    throw new HttpException({"message": this.i18n.translate("common.auth.too_many_requests"), msBeforeNext: tlError.msBeforeNext}, 429);
                 }
             }
             throw error;

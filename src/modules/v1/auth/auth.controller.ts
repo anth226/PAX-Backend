@@ -19,11 +19,14 @@ import {Response} from 'express'
 import { UpdatePasswordDto } from "./entity/dto/update-password.dto";
 import { PreAuthGuard } from "src/guards/pre-auth.guard";
 var CryptoJS = require("crypto-js");
+import { I18nService } from 'nestjs-i18n';
+import { I18nTranslations } from "src/generated/i18n.generated";
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
+    private readonly i18n: I18nService <I18nTranslations>,
     @InjectRepository(UserEntity) private readonly userModel: Repository<UserEntity>,
   ) {}
 
@@ -35,9 +38,6 @@ export class AuthController {
   ) {
     try {
       const userData = await this.authService.register(dto)
-      if(!userData) {
-        throw new HttpException("User not found with that email.", HttpStatus.BAD_REQUEST)
-      }
       return userData
     } catch (error) {
       return ErrorHandle(error) 
@@ -57,13 +57,13 @@ export class AuthController {
       await this.authService.limitLogin(dto.email, ip)
       const userData = await this.authService.checkEmail(dto)
       if(!userData) {
-        throw new HttpException("User not found with that email.", HttpStatus.BAD_REQUEST)
+        throw new HttpException(this.i18n.translate("common.auth.invalid_user"), HttpStatus.BAD_REQUEST)
       }
       res.status(200).json()
     } catch (error) {
       if(error?.response?.msBeforeNext) {
         res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
-        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+        return res.status(429).json({"message": this.i18n.translate("common.auth.too_many_requests"), statusCode: 429});
       }
       return res.status(500).json({"message": error.message, statusCode: 500});
     }
@@ -93,7 +93,7 @@ export class AuthController {
     } catch (error) {
       if(error?.response?.msBeforeNext) {
         res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
-        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+        return res.status(429).json({"message": this.i18n.translate("common.auth.too_many_requests"), statusCode: 429});
       }
       return res.status(500).json({"message": error.message, statusCode: 500});
     }
@@ -114,7 +114,7 @@ export class AuthController {
     } catch (error) {
       if(error?.response?.msBeforeNext) {
         res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
-        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+        return res.status(429).json({"message": this.i18n.translate("common.auth.too_many_requests"), statusCode: 429});
       }
       return res.status(500).json({"message": error.message, statusCode: 500});
     }
@@ -146,7 +146,7 @@ export class AuthController {
     } catch (error) {
       if(error?.response?.msBeforeNext) {
         res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
-        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+        return res.status(429).json({"message": this.i18n.translate("common.auth.too_many_requests"), statusCode: 429});
       }
       return res.status(500).json({"message": error.message, statusCode: 500});
     }
@@ -165,20 +165,20 @@ export class AuthController {
   //   }
   // }
 
-  @Get('/refresh')
-  @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
-  async refreshGet(
-    @Ip() ip: any,
-    @Req() req: Request,
-    @Body() dto: RefreshTokenDto,
-  ) {
-    try {
-        const userData = await this.authService.refreshToken(req, dto.refreshToken, ip);
-        return userData;
-    } catch (error) {
-      return ErrorHandle(error)
-    }
-  }
+  // @Get('/refresh')
+  // @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
+  // async refreshGet(
+  //   @Ip() ip: any,
+  //   @Req() req: Request,
+  //   @Body() dto: RefreshTokenDto,
+  // ) {
+  //   try {
+  //       const userData = await this.authService.refreshToken(req, dto.refreshToken, ip);
+  //       return userData;
+  //   } catch (error) {
+  //     return ErrorHandle(error)
+  //   }
+  // }
 
   @Post('/send/otp/phone')
   @UseGuards(PreAuthGuard)
@@ -195,17 +195,10 @@ export class AuthController {
     } catch (error) {
       if(error?.response?.msBeforeNext) {
         res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
-        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+        return res.status(429).json({"message": this.i18n.translate("common.auth.too_many_requests"), statusCode: 429});
       }
       return res.status(500).json({"message": error.message, statusCode: 500});
     }
-  }
-
-  @Post('/test')
-  async Test(
-    @Body() dto: any,
-  ) {
-    return this.authService.testSend(dto.phone)
   }
 
   @Post('/verify/otp/phone')
@@ -227,7 +220,7 @@ export class AuthController {
     } catch (error) {
       if(error?.response?.msBeforeNext) {
         res.set('Retry-After', String(Math.round(error?.response?.msBeforeNext / 1000) || 1));
-        return res.status(429).json({"message": "Too Many Requests", statusCode: 429});
+        return res.status(429).json({"message": this.i18n.translate("common.auth.too_many_requests"), statusCode: 429});
       }
       return res.status(500).json({"message": error.message, statusCode: 500});
     }
