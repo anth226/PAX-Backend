@@ -2,7 +2,7 @@ import { ErrorHandle } from 'src/exceptions/ErrorHandle';
 import { TOSTextDto } from './entity/dto/tos.dto';
 import { TOSTextEntity } from './entity/tos.entity';
 import { TOSTextService } from './tos.service';
-import { Controller, Post, Body, UseGuards, Req, Res } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, Res, Ip, Headers } from '@nestjs/common';
 import { PreAuthGuard } from 'src/guards/pre-auth.guard';
 import {Request, Response} from 'express'
 
@@ -24,11 +24,14 @@ export class TOSTextController {
     @UseGuards(PreAuthGuard)
     async acceptLatestTos(
         @Body() dto: any,
-        @Req() req: Request
+        @Req() req: Request,
+        @Ip() ip: any,
+        @Headers() headers: Record <string, string>
     ) {
         try {
-            console.log(req.user)
-            return true;
+            const ua = headers['user-agent'];
+            const method = req.method
+            return this.tosTextService.acceptLatestTos(req, ip, ua, method)
         } catch (error) {
             return ErrorHandle(error)
         }

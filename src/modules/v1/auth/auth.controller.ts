@@ -100,6 +100,7 @@ export class AuthController {
   }
 
   @Post('/send/otp/mail')
+  @UseGuards(PreAuthGuard)
   @HttpCode(HttpStatus.OK)
   async sendOtpMail(
     @Body() dto: OTPMailDto,
@@ -120,6 +121,7 @@ export class AuthController {
   }
 
   @Post('/verify/mail')
+  @UseGuards(PreAuthGuard)
   @ApiResponse({ status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
   async VerifyMail(
     @Body() dto: VerifyMailDto,
@@ -179,6 +181,7 @@ export class AuthController {
   }
 
   @Post('/send/otp/phone')
+  @UseGuards(PreAuthGuard)
   @HttpCode(HttpStatus.OK)
   async phoneSendOne(
     @Body() dto: OTPDto,
@@ -198,7 +201,15 @@ export class AuthController {
     }
   }
 
+  @Post('/test')
+  async Test(
+    @Body() dto: any,
+  ) {
+    return this.authService.testSend(dto.phone)
+  }
+
   @Post('/verify/otp/phone')
+  @UseGuards(PreAuthGuard)
   @ApiResponse({status: HttpStatus.OK, isArray: false, type: LoginResponseDto })
   async verifyOtpPhone(
     @Req() req: Request,
@@ -259,8 +270,6 @@ export class AuthController {
         return ErrorHandle(error)
       }
     }
-
-
 
   @Put('/password')
   @HttpCode(HttpStatus.OK)

@@ -21,6 +21,7 @@ import { RateLimiterRedis} from "rate-limiter-flexible";
 import {Request} from 'express'
 import { UpdatePasswordDto } from './entity/dto/update-password.dto';
 var CryptoJS = require("crypto-js");
+import parsePhoneNumber from 'libphonenumber-js'
 
 
 const softLockoutTime = Number(process.env.SOFT_PW_LOCKOUT_MINUTES) || 5;
@@ -67,6 +68,10 @@ export class AuthService {
   }
 
     async register(userData:CreateUserDto) {
+        const isNumberValid = this.isPhoneNumberValid(userData.phone)
+        if(!isNumberValid) {
+            throw new BadRequestException('Phone Number is not valid.');
+        }
         const user = await this.userModel.findOneBy({email: userData.email});
         if (user) {
             throw new BadRequestException('email already exists.');
@@ -442,14 +447,20 @@ export class AuthService {
     async checkHasNextPage(req: Request, currentPage: string, user: UserDto) {
         let nextPage: string | null = null;
         if(currentPage=="password" && user?.isTwoFactorAuthenticationEnabled) {
+            const payload = {id:user.id, email:user.email}
+            this.savePreAuthToken(req, payload)
             nextPage = "2fa";
         } else if(currentPage!="password-reset" && user?.requirePassReset) {
-            const payload = {id:user.id, email:user.email}
-            this.savePreAuthToken(req, payload)
+            if(!req.cookies?.pre_auth_token) {
+                const payload = {id:user.id, email:user.email}
+                this.savePreAuthToken(req, payload)
+            }
             nextPage = "password-reset";
         } else if(!user?.hasAcceptedLatestTOS) {
-            const payload = {id:user.id, email:user.email}
-            this.savePreAuthToken(req, payload)
+            if(!req.cookies?.pre_auth_token) {
+                const payload = {id:user.id, email:user.email}
+                this.savePreAuthToken(req, payload)
+            }
             nextPage = "agreement";
         }
         if(nextPage) {
@@ -623,6 +634,14 @@ export class AuthService {
         } else {
             return `${seconds} second${seconds !== 1 ? 's' : ''}`;
         }
+    }
+
+    isPhoneNumberValid(phone: string) {
+        return parsePhoneNumber(phone);
+    }
+
+    async testSend(target, message="hello") {
+        return target;
     }
 
 

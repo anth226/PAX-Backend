@@ -35,7 +35,7 @@ export class TOSTextService {
             message: 'The user with the given ID is not in the database',
         });
     }
-    const tosText = await this.tosTextModel.findOne({order: {createdAt: 'DESC'}})
+    const tosText = await this.tosTextModel.findOne({where:{}, order: {createdAt: 'DESC'}})
     if(!tosText) {
       throw new BadRequestException({
             message: 'No TOS entry found in the database.',
