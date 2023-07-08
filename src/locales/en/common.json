@@ -21,7 +21,7 @@
         "reset_link_expired": "Reset link is expired. Please try again.",
         "not_matched": "{value1} and {value2} does not match",
         "invalid_link": "Invalid link",
-        "otp_message": "Your {appName} Code is: {otpCode} \n\nDon't share it with anyone. \n\n@{domain} {url}"
+        "otp_message": "Your {appName} Code is: {otpCode} \n\nDon't share it with anyone. \n\n@{domain} #{otpCode} %{url}"
     },
     "mail": {
         "otp_verification": {
