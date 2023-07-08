@@ -16,10 +16,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (!user) {
       const { message } = info;
       if (info instanceof TokenExpiredError) {
-        throw new UnauthorizedException(message)
+        throw new UnauthorizedException(message);
       }
       if (info instanceof Error && message === 'No auth token') {
-        throw new UnauthorizedException(message)
+        throw new UnauthorizedException(message);
       }
     }
 

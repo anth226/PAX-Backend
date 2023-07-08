@@ -14,7 +14,6 @@ import { UserEntity } from '../../users/entity/user.entity';
   name: 'tokens',
 })
 export class RefreshTokenSessionsEntity extends BaseEntity {
-    
   @PrimaryGeneratedColumn()
   id: string;
 

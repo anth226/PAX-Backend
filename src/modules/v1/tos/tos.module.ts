@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtService } from '@nestjs/jwt';
 import { TOSTextController } from './tos.controller';
 import { TOSTextService } from './tos.service';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { TOSTextEntity } from './entity/tos.entity';
 import { UserEntity } from '../users/entity/user.entity';
 import { TOSAcceptanceEntity } from './entity/tos-acceptance.entity';
@@ -18,7 +19,6 @@ import { RoleService } from '../roles/roles.service';
 import { MailService } from '../mail/mail.service';
 import { PhoneService } from '../phone/phone.service';
 import { JwtAuthStrategy } from '../auth/strategies/jwt-auth.strategy';
-import { JwtService } from '@nestjs/jwt';
 
 @Module({
   providers: [TOSTextService, AuthService, LoggingService, JwtService, MailService, PhoneService],
@@ -34,9 +34,8 @@ import { JwtService } from '@nestjs/jwt';
       OTPEntity,
       LoginAttemptEntity,
       LoginLogEntity,
-      TwoFactorMethodEntity
-      
-    ])
+      TwoFactorMethodEntity,
+    ]),
   ],
   exports: [TOSTextService],
 })

@@ -3,7 +3,7 @@ import { TOSTextEntity } from './tos.entity';
 import { UserEntity } from '../../users/entity/user.entity';
 
 @Entity({
-    name: "tos-acceptance"
+  name: 'tos-acceptance',
 })
 export class TOSAcceptanceEntity {
   @PrimaryGeneratedColumn()
@@ -23,5 +23,4 @@ export class TOSAcceptanceEntity {
 
   @Column({ default: () => 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
-
 }

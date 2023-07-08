@@ -1,7 +1,7 @@
 import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity({
-    name: "tos-text"
+  name: 'tos-text',
 })
 export class TOSTextEntity {
   @PrimaryGeneratedColumn()
@@ -15,5 +15,4 @@ export class TOSTextEntity {
 
   @Column({ default: () => 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
-  
 }

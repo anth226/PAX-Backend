@@ -7,7 +7,7 @@ import { UserEntity } from '../../users/entity/user.entity';
 export class LoginAttemptEntity {
   @PrimaryGeneratedColumn()
   id: number;
-  
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 

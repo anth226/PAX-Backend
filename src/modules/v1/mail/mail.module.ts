@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
+import { MailerModule } from '@nestjs-modules/mailer';
+import { SES } from 'aws-sdk';
 import { MailService } from './mail.service';
 import { MailController } from './mail.controller';
-import { MailerModule } from '@nestjs-modules/mailer';
-import {SES} from 'aws-sdk';
 
 @Module({
   providers: [MailService],

@@ -1,18 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { from, toArray } from 'rxjs';
-import { UserEntity } from './entity/user.entity';
 import { Repository } from 'typeorm';
-
+import { UserEntity } from './entity/user.entity';
 
 @Injectable()
 export class UserService {
-    constructor(
-    @InjectRepository(UserEntity) private readonly userModel: Repository<UserEntity>
-    ){}
+  constructor(@InjectRepository(UserEntity) private readonly userModel: Repository<UserEntity>) {}
 
-    public async getUserByField(field: string, value: string | number) {
-        const user = await this.userModel.findOne({ where: { [field]: value } })
-        return user
-    }
+  public async getUserByField(field: string, value: string | number) {
+    const user = await this.userModel.findOne({ where: { [field]: value } });
+    return user;
+  }
 }

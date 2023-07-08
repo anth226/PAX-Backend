@@ -5,16 +5,20 @@ import {
   ValidatorConstraintInterface,
   ValidationArguments,
 } from 'class-validator';
-var CryptoJS = require("crypto-js");
-import {  BadRequestException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
+
+const CryptoJS = require('crypto-js');
 
 @ValidatorConstraint({ name: 'passwordComplexity', async: false })
 export class PasswordComplexityConstraint implements ValidatorConstraintInterface {
   validate(value: string, args: ValidationArguments) {
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/;
-    const decryptedValue = CryptoJS.AES.decrypt(value, process.env.PASSWORD_DECRYPTION_KEY ?? "").toString(CryptoJS.enc.Utf8);
-    if(!decryptedValue) {
-      throw new BadRequestException("Password is not in right format.");
+    const decryptedValue = CryptoJS.AES.decrypt(
+      value,
+      process.env.PASSWORD_DECRYPTION_KEY ?? '',
+    ).toString(CryptoJS.enc.Utf8);
+    if (!decryptedValue) {
+      throw new BadRequestException('Password is not in right format.');
     }
     return passwordRegex.test(decryptedValue);
   }
@@ -28,7 +32,7 @@ export function PasswordComplexity(validationOptions?: ValidationOptions) {
   return function (object: Object, propertyName: string) {
     registerDecorator({
       target: object.constructor,
-      propertyName: propertyName,
+      propertyName,
       options: validationOptions,
       constraints: [],
       validator: PasswordComplexityConstraint,

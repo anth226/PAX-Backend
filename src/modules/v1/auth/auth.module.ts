@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
@@ -13,7 +14,6 @@ import { UserRoleEntity } from '../roles/entity/user-role.entity';
 import { RoleEntity } from '../roles/entity/role.entity';
 import { OTPEntity } from './entity/otp.entity';
 import { PhoneService } from '../phone/phone.service';
-import {PassportModule} from '@nestjs/passport'
 import { JwtAuthStrategy } from './strategies/jwt-auth.strategy';
 import { LoginAttemptEntity } from './entity/login-attempt.entity';
 import { LoggingService } from './login-logging.service';
@@ -22,14 +22,7 @@ import { TwoFactorMethodEntity } from './entity/two-factor.entity';
 
 @Module({
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    RoleService,
-    MailService,
-    PhoneService,
-    JwtAuthStrategy,
-    LoggingService
-  ],
+  providers: [AuthService, RoleService, MailService, PhoneService, JwtAuthStrategy, LoggingService],
   imports: [
     JwtModule.register({
       secret: process.env.JWT_ACCESS_SECRET || 'SERCRET',
@@ -46,14 +39,11 @@ import { TwoFactorMethodEntity } from './entity/two-factor.entity';
       OTPEntity,
       LoginAttemptEntity,
       LoginLogEntity,
-      TwoFactorMethodEntity
+      TwoFactorMethodEntity,
     ]),
     RolesModule,
     forwardRef(() => UsersModule),
   ],
-  exports: [
-    AuthService,
-    JwtModule,
-  ],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

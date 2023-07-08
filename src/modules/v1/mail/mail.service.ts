@@ -8,8 +8,9 @@ import { I18nService } from 'nestjs-i18n';
 export class MailService {
   constructor(
     private readonly mailerService: MailerService,
-    private readonly i18n: I18nService <I18nTranslations>
+    private readonly i18n: I18nService<I18nTranslations>,
   ) {}
+
   async sendActivationMail(toEmail: string, link: string, generatedPassword?: any): Promise<void> {
     try {
       this.mailerService.sendMail({
@@ -22,7 +23,7 @@ export class MailService {
                   ${
                     generatedPassword
                       ? `<div><p>Your username: ${toEmail}</p><p>Your password: ${generatedPassword}</p><div>`
-                      :''
+                      : ''
                   }
                   <h1>Click here to activate</h1>
                   <a href="${link}">${link}</a>
@@ -30,17 +31,18 @@ export class MailService {
               `,
       });
     } catch (error) {
-      console.log('Error sending mail: ', error.message);
-      throw new HttpException(error.message, 500)
+      throw new HttpException(error.message, 500);
     }
   }
 
-  async sendMailCode(toEmail: string, otpCOde: number | string, name: string="User") {
+  async sendMailCode(toEmail: string, otpCOde: number | string, name: string = 'User') {
     try {
       this.mailerService.sendMail({
         to: toEmail, // list of receivers
         from: process.env.AWS_SENDER_EMAIL, // sender address
-        subject: this.i18n.translate('common.mail.otp_verification.subject', {args: {companyName: process.env.COMPANY_NAME}}),
+        subject: this.i18n.translate('common.mail.otp_verification.subject', {
+          args: { companyName: process.env.COMPANY_NAME },
+        }),
         text: '', // plaintext body
         html: `
 <html lang="en">
@@ -129,7 +131,7 @@ export class MailService {
 
       <!-- Footer -->
       <div class="footer">
-        <p style="font-style: italic;">Copyright @ 2023 ${process.env.COMPANY_NAME} LLC, All rights reserved.</p>
+        <p style="font-style: italic;">Copyright @ ${new Date().getFullYear()} ${process.env.COMPANY_NAME} LLC, All rights reserved.</p>
         <p>This message was sent by ${process.env.COMPANY_NAME} billing department. To change when and how you receive these emails please contact our billing team by phone at: ${process.env.COMPANY_PHONE} or via email at ${process.env.COMPANY_EMAIL}</p>
       </div>
     </div>
@@ -145,7 +147,7 @@ export class MailService {
         ],
       });
     } catch (error) {
-      throw new HttpException(error.message, 500)
+      throw new HttpException(error.message, 500);
     }
   }
 
@@ -154,7 +156,9 @@ export class MailService {
       await this.mailerService.sendMail({
         to: toEmail,
         from: process.env.AWS_SENDER_EMAIL,
-        subject: this.i18n.translate('common.mail.reset_password.subject', {args: {companyName: process.env.COMPANY_NAME}}),
+        subject: this.i18n.translate('common.mail.reset_password.subject', {
+          args: { companyName: process.env.COMPANY_NAME },
+        }),
         text: '',
         html: `
 <html lang="en">
@@ -262,13 +266,13 @@ export class MailService {
 
     <!-- Footer -->
     <div class="footer">
-      <p style="font-style: italic;">Copyright @ 2023 ${process.env.COMPANY_NAME} LLC, All rights reserved.</p>
+      <p style="font-style: italic;">Copyright @ ${new Date().getFullYear()} ${process.env.COMPANY_NAME} LLC, All rights reserved.</p>
       <p>This message was sent by ${process.env.COMPANY_NAME} billing department. To change when and how you receive these emails please contact our billing team by phone at: ${process.env.COMPANY_PHONE} or via email at ${process.env.COMPANY_EMAIL}</p>
     </div>
   </div>
 </body>
 </html>`,
-      attachments: [
+        attachments: [
           {
             filename: 'logo.png',
             path: path.join(__dirname, '../../../', 'assets', 'logo.png'),
@@ -277,7 +281,7 @@ export class MailService {
         ],
       });
     } catch (error) {
-      throw new HttpException(error.message, 500)
+      throw new HttpException(error.message, 500);
     }
   }
 }

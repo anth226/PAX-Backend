@@ -1,26 +1,28 @@
 import { HttpException, Injectable, Inject } from '@nestjs/common';
-import {SNS} from 'aws-sdk'
+import { SNS } from 'aws-sdk';
 
 @Injectable()
 export class PhoneService {
   private snsService: SNS;
+
   constructor() {
     this.snsService = new SNS({
-        accessKeyId: process.env.AWS_ACCESS_KEY,
-        secretAccessKey: process.env.AWS_SECRET_KEY,
-        region: process.env.AWS_REGION,
-    })
+      accessKeyId: process.env.AWS_ACCESS_KEY,
+      secretAccessKey: process.env.AWS_SECRET_KEY,
+      region: process.env.AWS_REGION,
+    });
   }
+
   async sendPhoneSMS(TARGET_PHONE_NUMBER: string, MESSAGE: string) {
     try {
       const params = {
         Message: MESSAGE,
         PhoneNumber: TARGET_PHONE_NUMBER,
       };
-      return await this.snsService.publish(params).promise()
+      return await this.snsService.publish(params).promise();
     } catch (error) {
-      console.log(error)
-        throw new HttpException(error.message, 500)
+      console.log(error);
+      throw new HttpException(error.message, 500);
     }
   }
 

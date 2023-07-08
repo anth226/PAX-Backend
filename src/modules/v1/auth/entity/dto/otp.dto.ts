@@ -1,7 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString } from 'class-validator';
+import { IsEmail, IsNumber, IsString } from 'class-validator';
 
 export class OTPDto {
+  @ApiProperty({ example: 1 })
+  @IsNumber()
+  methodId: number;
+}
+
+export class OTPPhoneDto {
   @ApiProperty({ example: '+1XXXXXXXXXX' })
   @IsString()
   phone: string;
@@ -14,9 +20,9 @@ export class OTPMailDto {
 }
 
 export class OTPVerifyDto {
-  @ApiProperty({ example: '+1XXXXXXXXXX' })
-  @IsString()
-  phone: string;
+  @ApiProperty({ example: 1 })
+  @IsNumber()
+  methodId: number;
 
   @ApiProperty({ example: '123456' })
   @IsString()

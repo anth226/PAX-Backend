@@ -100,7 +100,7 @@ export class UserDto {
   phone: string;
 
   @ApiProperty({
-    description: 'The prefix of the user\'s name',
+    description: "The prefix of the user's name",
     example: 'Mr.',
   })
   @IsString()
@@ -128,7 +128,7 @@ export class UserDto {
   nameLast: string;
 
   @ApiProperty({
-    description: 'The suffix of the user\'s name',
+    description: "The suffix of the user's name",
     example: 'Jr.',
   })
   @IsString()
@@ -153,5 +153,5 @@ export class UserDto {
     this.isTwoFactorAuthenticationEnabled = model.isTwoFactorAuthenticationEnabled;
     this.requirePassReset = model.requirePassReset;
     this.hasAcceptedLatestTOS = model.hasAcceptedLatestTOS;
-  }  
+  }
 }

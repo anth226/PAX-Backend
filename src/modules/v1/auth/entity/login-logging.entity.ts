@@ -2,7 +2,7 @@ import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { UserEntity } from '../../users/entity/user.entity';
 
 @Entity({
-    name: "login-logging"
+  name: 'login-logging',
 })
 export class LoginLogEntity {
   @PrimaryGeneratedColumn()
@@ -17,10 +17,10 @@ export class LoginLogEntity {
   @Column()
   loginMethod: string;
 
-  @Column({default: true})
+  @Column({ default: true })
   otpStatus: boolean;
 
-  @Column({nullable:true})
+  @Column({ nullable: true })
   location: string;
 
   @Column({ default: () => 'CURRENT_TIMESTAMP' })

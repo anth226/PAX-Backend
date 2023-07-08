@@ -14,7 +14,6 @@ import { LoginAttemptEntity } from '../../auth/entity/login-attempt.entity';
 import { LoginLogEntity } from '../../auth/entity/login-logging.entity';
 import { TwoFactorMethodEntity } from '../../auth/entity/two-factor.entity';
 
-
 @Entity({
   name: 'users',
 })
@@ -28,10 +27,10 @@ export class UserEntity extends BaseEntity {
   @Column({ nullable: true })
   organizationID: number;
 
-  @Column({default: true})
+  @Column({ default: true })
   individualAccount: boolean;
 
-  @Column({unique:true})
+  @Column({ unique: true })
   email: string;
 
   @Column({ nullable: true })
@@ -70,16 +69,16 @@ export class UserEntity extends BaseEntity {
   @Column()
   password: string;
 
-  @Column({default:false})
+  @Column({ default: false })
   isActivated: boolean;
 
-  @Column({default:false})
+  @Column({ default: false })
   banned: boolean;
-  
+
   @Column({ default: false })
   requirePassReset: boolean;
 
-  @Column({default:false})
+  @Column({ default: false })
   isTwoFactorAuthenticationEnabled: boolean;
 
   @Column({ type: 'boolean', default: false })
@@ -109,5 +108,4 @@ export class UserEntity extends BaseEntity {
   @OneToOne(() => TwoFactorMethodEntity)
   @JoinColumn()
   defaultTwoFactorMethod: TwoFactorMethodEntity;
-
 }

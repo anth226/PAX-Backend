@@ -1,8 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
-import {ValidationPipe} from '@nestjs/common'
-import * as cookieParser from 'cookie-parser'
 
 async function bootstrap() {
   try {
@@ -14,7 +14,7 @@ async function bootstrap() {
         origin: process.env.CLIENT_URL,
       },
     });
-    app.use(cookieParser())
+    app.use(cookieParser());
     app.setGlobalPrefix('v1');
     app.useGlobalPipes(new ValidationPipe());
     const config = new DocumentBuilder()
@@ -27,7 +27,7 @@ async function bootstrap() {
     await app.listen(PORT);
     console.log(`Server started on port - ${PORT}`);
   } catch (error) {
-    console.log(error.message)
+    console.log(error.message);
   }
 }
 bootstrap();

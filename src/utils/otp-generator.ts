@@ -24,9 +24,9 @@ type OtpOptions = {
 };
 
 const otpGenerator = {
-  generate: async function (length: number, options: OtpOptions) {
+  async generate(len: number, options: OtpOptions) {
     const { randomInt } = await import('crypto');
-    length = length || 10;
+    len = len || 10;
 
     const allowsChars =
       ((options.digits || '') && digits) +
@@ -36,7 +36,7 @@ const otpGenerator = {
 
     let otpCode: string = '';
 
-    while (otpCode.length < length) {
+    while (otpCode.length < len) {
       const charIndex = randomInt(0, allowsChars.length);
       console.log({ charIndex });
       otpCode += allowsChars[charIndex];

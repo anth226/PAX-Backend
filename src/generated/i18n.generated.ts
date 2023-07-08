@@ -8,6 +8,7 @@ export type I18nTranslations = {
             "email_exists": string;
             "invalid_user": string;
             "invalid_email": string;
+            "invalid_two_fa_method": string;
             "too_many_requests": string;
             "banned": string;
             "inactive": string;
